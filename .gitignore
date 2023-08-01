@@ -1,3 +1,6 @@
 battery_and_charging/
+intermediate_scripts/
+others/
 __pycache__/
 figures/
+.gitignore
