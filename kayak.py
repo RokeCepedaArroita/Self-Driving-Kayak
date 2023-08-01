@@ -50,7 +50,7 @@ class Kayak:
 
 
         # Calculate the net torque, positive is clockwise
-        net_torque = (left_thrust - right_thrust) * self.engine_spacing
+        net_torque = (left_thrust - right_thrust) * self.engine_spacing 
 
         # TODO: Add weather torque, if any
         if self.weather is not None:
