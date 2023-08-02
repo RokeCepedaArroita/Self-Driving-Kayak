@@ -1,13 +1,16 @@
+import numpy as np
+from angular_tools import shortest_angle_difference
+
 class Weather:
-    def __init__(self, wind_speed=0, wind_direction=180, current=0, current_direction=180):
+    def __init__(self, wind_speed=0, wind_heading=0, current=0, current_direction=0):
         self.wind_speed = wind_speed # in km/h
-        self.wind_direction = wind_direction # deg
+        self.wind_heading = wind_heading # deg
         self.current = current # in km/h
         self.current_direction = current_direction # deg
-        self.weathercocking_constant = 1 # in m^-3, determines the magnitude of torque exerted by the wind
+        self.weathercocking_constant = 0.01 # in m^-3, determines the magnitude of torque exerted by the wind
 
 
-    def apparent_wind(kayak_heading, kayak_speed, wind_heading, wind_speed):
+    def apparent_wind(self, kayak_heading, kayak_speed):
         ''' Calculate the apparent wind felt in the kayak as a result of the combined motion of
             the kayak and the wind. Output the apparent wind speed and give the direction in
             relative terms to the nose of the kayak:
@@ -26,13 +29,13 @@ class Weather:
 
         # Convert headings to radians
         kayak_heading_rad = np.deg2rad(kayak_heading)
-        wind_heading_rad = np.deg2rad(wind_heading)
+        wind_heading_rad = np.deg2rad(self.wind_heading)
 
         # Convert speeds and headings to Cartesian coordinates
         kayak_vx = kayak_wind_speed * np.cos(kayak_heading_rad)
         kayak_vy = kayak_wind_speed * np.sin(kayak_heading_rad)
-        wind_vx = wind_speed * np.cos(wind_heading_rad)
-        wind_vy = wind_speed * np.sin(wind_heading_rad)
+        wind_vx = self.wind_speed * np.cos(wind_heading_rad)
+        wind_vy = self.wind_speed * np.sin(wind_heading_rad)
 
         # Calculate apparent wind speed and direction
         apparent_vx = wind_vx + kayak_vx
@@ -45,10 +48,10 @@ class Weather:
         apparent_angle_relative_to_kayak %= 360
 
         # Return apparent wind speed and direction relative to the kayak
-        return apparent_speed, apparent_angle
+        return apparent_speed, apparent_angle_relative_to_kayak
 
 
-    def weathercocking(self, kayak_angle, kayak_speed, kayak_length):
+    def weathercocking(self, kayak_heading, kayak_speed, kayak_length):
         ''' Wind will exert a torque on a boat, making it stable only when it is perpendicular
             to the incoming wind. The magnitude of this effect needs to be experimentally
             measured by matching the time that it takes for a boat to turn from 45 deg relative
@@ -60,18 +63,43 @@ class Weather:
         # Subtract the kayak motion from the wind motion to get the apparent wind speed and relative angle
         # relative to the frame of reference of the kayak
 
-
         # Relative angle of wind hitting the kayak
-        relative_angle = shortest_angle_difference(kayak_angle, self.wind_direction+180) # deg
+        apparent_speed, apparent_angle = self.apparent_wind(kayak_heading, kayak_speed) # km/h and deg
+
         # Calculate the torque caused by the wind on the kayak
-        self.weathercocking_torque = self.weathercocking_constant * self.wind_speed**2 * (kayak_length/2) * np.sin( 2 * np.deg2rad(relative_angle))
+
+        # In the definition of apparent angle, if positive, it should turn to the left,
+        # and if negative, it should turn to the right. This goes against the definition of
+        # torque in the initial kayak setup. Therefore we add another line to change the sign
+        self.weathercocking_torque = self.weathercocking_constant * apparent_speed**2 * (kayak_length/2) * np.sin( 2 * np.deg2rad(apparent_angle))
+        self.weathercocking_torque = -self.weathercocking_torque # make the torque directions consistent (e.g. positive torque turns to the right)
 
         return self.weathercocking_torque
 
 
     # TODO: Calculate drag from water, dependent on velocity (get constant from terminal velocity at a fixed power level)
 
-    def water_drag():
-        ''' Simple model for the drag force of the water. Make it independent of angle for now '''
+    def water_drag(self, kayak_speed, CdA):
+        ''' Simple model for the drag force of the water in Newtons when travelling forward.
+            CdA is the effective drag_coefficient times the effective cross sectional area,
+            which is measured experimentally. Note that the value of both A and Cd changes with
+            different orientations (e.g. a side-on kayak will have a higher drag coefficient), and
+            thus this value cannot be extrapolated to different orientations without real-world testing '''
 
-        return 0
+        water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
+        drag_force = 0.5 * water_density * (kayak_speed/3.6)**2 * CdA # Newtons, speed needs to be in m/s
+        power_required = drag_force*(kayak_speed/3.6) # Watts
+
+        return drag_force # Newtons
+
+    def maximum_speed(self, target_power_level, max_thrust, CdA):
+        ''' The terminal speed achieved by the kayak under stable power levels
+            The 100% engine power is set to 175W and 2.27 kg '''
+
+        water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
+        drag_force = 0.5 * water_density * (kayak_speed/3.6)**2 * CdA # Newtons, speed needs to be in m/s
+
+
+        terminal_speed = (  )**(1/3)
+
+        return terminal_speed
