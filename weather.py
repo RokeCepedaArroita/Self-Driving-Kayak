@@ -8,6 +8,7 @@ class Weather:
         self.current = current # in km/h
         self.current_direction = current_direction # deg
         self.weathercocking_constant = 0.01 # in m^-3, determines the magnitude of torque exerted by the wind
+        self.water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
 
 
     def apparent_wind(self, kayak_heading, kayak_speed):
@@ -51,6 +52,11 @@ class Weather:
         return apparent_speed, apparent_angle_relative_to_kayak
 
 
+    def wind_drag():
+        ''' TODO: Implement drag caused by wind. Need experimental tests to calibrate this '''
+        return
+
+
     def weathercocking(self, kayak_heading, kayak_speed, kayak_length):
         ''' Wind will exert a torque on a boat, making it stable only when it is perpendicular
             to the incoming wind. The magnitude of this effect needs to be experimentally
@@ -77,7 +83,6 @@ class Weather:
         return self.weathercocking_torque
 
 
-    # TODO: Calculate drag from water, dependent on velocity (get constant from terminal velocity at a fixed power level)
 
     def water_drag(self, kayak_speed, CdA):
         ''' Simple model for the drag force of the water in Newtons when travelling forward.
@@ -86,20 +91,31 @@ class Weather:
             different orientations (e.g. a side-on kayak will have a higher drag coefficient), and
             thus this value cannot be extrapolated to different orientations without real-world testing '''
 
-        water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
-        drag_force = 0.5 * water_density * (kayak_speed/3.6)**2 * CdA # Newtons, speed needs to be in m/s
-        power_required = drag_force*(kayak_speed/3.6) # Watts
+        drag_force = 0.5 * self.water_density * (kayak_speed/3.6)**2 * CdA # Newtons, speed needs to be in m/s
 
         return drag_force # Newtons
 
-    def maximum_speed(self, target_power_level, max_thrust, CdA):
-        ''' The terminal speed achieved by the kayak under stable power levels
-            The 100% engine power is set to 175W and 2.27 kg '''
 
-        water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
-        drag_force = 0.5 * water_density * (kayak_speed/3.6)**2 * CdA # Newtons, speed needs to be in m/s
+    def maximum_speed(self, target_power_level, power_to_thrust, CdA):
+        ''' The terminal speed achieved by the kayak under equal power levels in each engine
+            The power_to_thrust function is one that will convert the engine power to thrust
+            in kg, and one that takes the kayak object and the engine power level (0-100% as
+            the input). CdA is the effective drag constant of the kayak in m^2'''
+
+        engine_power_level = target_power_level/2. # half the power to each engine
+
+        # Calculate thrust and convert to Newtons
+        thrust = power_to_thrust(engine_power_level)*9.81
+        thrust = thrust*2 # two engines in total
+
+        # Calculate the speed at which both forces are equal
+        terminal_speed = ((2*thrust)/(self.water_density*CdA))**(1/2) # in m/s
+        terminal_speed = terminal_speed*3.6 # convert to km/h
+
+        return terminal_speed # km/h
 
 
-        terminal_speed = (  )**(1/3)
 
-        return terminal_speed
+    def water_torque(self):
+        ''' TODO: simulates the opposition to turning produced by the skegs '''
+        return

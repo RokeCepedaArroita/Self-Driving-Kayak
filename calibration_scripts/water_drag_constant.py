@@ -69,7 +69,21 @@ for power, speed, direc in zip(powers, speeds, direcs):
     forces.append(force)
 
 
+# Make ACd plot
 
+for corrected_speed in corrected_speeds:
+    print(corrected_speeds)
+
+
+plt.figure(69)
+plt.plot(powers,corrected_speeds,'o', color='g', label='Corrected')
+plt.xlabel('Power (W)')
+plt.ylabel('Speed (km/h)')
+plt.grid()
+plt.ylim([0,5.4])
+plt.xlim([0, 183])
+plt.legend()
+plt.show()
 
 # Make ACd plot
 plt.figure(1)

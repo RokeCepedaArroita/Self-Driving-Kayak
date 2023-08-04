@@ -1,21 +1,31 @@
 import numpy as np
 
 class Kayak:
-    def __init__(self, length=3.3, width=0.9, mass=150, engine_spacing=0.25,
-                 max_thrust=2.26, max_power=175, initial_angle=90, initial_angular_velocity=0,
-                 initial_speed=0, weather=None):
+    def __init__(self, length=3.46, effective_length=2.6, effective_width=0.7, mass=155,
+                 center_of_mass=-0.141, engine_spacing=0.178, max_thrust=2.26, max_power=175,
+                 min_power=2, initial_angle=90, initial_angular_velocity=0, initial_speed=0, weather=None):
 
         # Kayak parameters
-        self.length  = length                # m, effective length
-        self.width   = width                 # m, effective width
-        self.mass    = mass                  # kg
-        self.engine_spacing = engine_spacing # m from center of axis to each engine
-        self.max_thrust = max_thrust         # kg, from one engine
-        self.max_power  = max_power          # W,  from one engine
+        self.length  = length                      # m, total length
+        self.effective_length = effective_length   # m, effective length for angular moment of inertia calculations
+        self.width   = effective_width             # m, effective width for angular moment of inertia calculations
+        self.mass    = mass                        # kg, total mass including kayak, passengers and cargo
+        self.center_of_mass = center_of_mass       # m, offset between the geometric center and the center of mass (negative is towards the stern)
+        self.engine_spacing = engine_spacing       # m from center of axis to each engine, 31.5 cm between skegs and 2.1 cm additional if engines are placed outside
+        self.max_thrust = max_thrust               # kg, from one engine
+        self.max_power  = max_power                # W, from one engine
+        self.minimum_power = min_power             # W, power below which there is no thrust
 
-        # Forward drag and propulsion efficiency (experimentally measured)
+        # Forward drag and propulsion efficiency characteristics (experimentally measured)
+        # Note: The uncorrected CdA constant corresponds to the force the motor would generate
+        # at 100% efficiency. However, the propeller efficiency is lower due to propeller,
+        # motor and electrical losses.Therefore, the real-world CdA constant is given by
+        # CdA*efficiency. A multiplier to the drag is added to account for the drag added
+        # by the second motor, since the experimental numbers come from a single engine test.
+        # The overall uncertainty of these numbers is around 30%.
         self.overall_efficiency = 0.206            # overall propulsion efficiency in converting power to forward push force (includes electrical, motor friction and propeller losses)
-        self.CdA = 0.101*self.overall_efficiency   # m^2, effective drag_coefficient*effective_cross_sectional_area, standard deviation is 0.018 (18%). The uncorrected CdA constant corresponds to the force the motor would generate at 100% efficiency. However the propeller efficiency is lower due to propeller, motor and electrical losses.Therefore, the real-world CdA constant is given by CdA*efficiency.
+        self.twin_engine_drag_penalty = 1.113      # drag penalty incurred by placing a second engine
+        self.CdA = 0.101*self.overall_efficiency*self.twin_engine_drag_penalty  # m^2, effective drag_coefficient*effective_cross_sectional_area, standard deviation is 18%
 
         # Kinematics
         self.position = [0,0]                             # position in m
@@ -28,16 +38,27 @@ class Kayak:
         self.weather = weather     # weather class with parameters and functions
 
         # Calculate angular moment of inertia (maximum authority 2.3 deg/s^2 without reverse in my case)
-        self.I = (1/12) * self.mass * (self.length**2 + self.width**2) # about 146 kg m^2
+        self.I = (1/12) * self.mass * (self.effective_length**2 + self.width**2) # about 146 kg m^2
 
 
     def power_to_thrust(self, engine_power_level):
-        ''' Converts the engine power (0-100%) into a thrust in kg,
-            based on a fit to experimental data. 100% thrust is
-            defined as 175W (2.26 kg) '''
+        ''' Converts the engine power (0-100%) into a thrust in kg, based on a fit
+            to experimental data. 100% thrust is defined as 175W (2.26 kg), in the
+            self.max_power variable. A constant efficiency propeller will have a
+            thrust proportional to power^(2/3). A real propeller will typically have
+            a lower index (~0.55), indicating worse efficiency at high power. '''
 
-            power = (engine_power_level/100)*self.max_power
-            thrust = 0.135 * power**0.546
+        # At very low values, the fit overestimates the push force. Therefore a smoothly
+        # broken power law is used, with an index varying from 0.8 to 0.55 and a breaking
+        # point of 20W. This makes the push more realistic, especially below 10W, and fits
+        # the experimental data.
+
+        power = (engine_power_level/100)*self.max_power
+        thrust = 0.1410 * power**0.5386
+
+        # At very low values, the motor won't spin so it won't create thrust
+        if power < self.minimum_power:
+            thrust = 0
 
         return thrust # in kg
 
@@ -46,11 +67,11 @@ class Kayak:
         ''' Update linear movement and rotation using Euler's method '''
 
         # Convert engine power from percentage to actual thrust in Newtons
-        left_thrust  =  power_to_thrust(left_engine_power ) * 9.81 # left_engine_power  / 100 * self.max_thrust * 9.81
-        right_thrust =  power_to_thrust(right_engine_power) * 9.81 # right_engine_power / 100 * self.max_thrust * 9.81
+        left_thrust  =  self.power_to_thrust(left_engine_power ) * 9.81
+        right_thrust =  self.power_to_thrust(right_engine_power) * 9.81
 
         # Drag force in Newtowns from water resistance
-        water_drag = self.weather.water_drag()
+        water_drag = self.weather.water_drag(self.speed, self.CdA)
 
         # Calculate linear acceleration in m/s^2
         # Note: this calculation simplifies the force as if it was applied to the center
@@ -68,7 +89,7 @@ class Kayak:
         # Calculate the engine torque, positive is to the right (clockwise if seen from above)
         engine_torque = (left_thrust - right_thrust) * self.engine_spacing
 
-        # TODO: Add weather torque, positive is to the right (clockwise if seen from above)
+        # Realistic wind torque (a.k.a weathercocking), positive is to the right (clockwise if seen from above)
         if self.weather is not None:
             wind_torque = self.weather.weathercocking(self.angle, self.speed, self.length)
         else:
@@ -77,8 +98,9 @@ class Kayak:
         # Calculate the net torque, positive is to the right (clockwise if seen from above)
         net_torque = engine_torque + wind_torque
 
-        # simple rotational friction
-        friction = 0.25
+        # TODO: Implement a more realistic model of the rotational drag!!
+        # Simple rotational friction
+        friction = 0.55
         if net_torque > 0:
             net_torque += +friction*self.angular_velocity
         if net_torque < 0:
@@ -94,4 +116,4 @@ class Kayak:
         self.angle += self.angular_velocity*dt + 0.5*angular_acceleration*dt**2
 
         # Return the new angle and angular velocity
-        return self.angle, self.angular_velocity
+        return self.angle, self.angular_velocity, self.position, self.speed, self.acceleration
