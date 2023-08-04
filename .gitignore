@@ -4,4 +4,4 @@ calibration_scripts/
 others/
 __pycache__/
 figures/
-.gitignore
+phone sensors/

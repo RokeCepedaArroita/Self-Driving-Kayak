@@ -46,15 +46,13 @@ class Kayak:
             to experimental data. 100% thrust is defined as 175W (2.26 kg), in the
             self.max_power variable. A constant efficiency propeller will have a
             thrust proportional to power^(2/3). A real propeller will typically have
-            a lower index (~0.55), indicating worse efficiency at high power. '''
-
-        # At very low values, the fit overestimates the push force. Therefore a smoothly
-        # broken power law is used, with an index varying from 0.8 to 0.55 and a breaking
-        # point of 20W. This makes the push more realistic, especially below 10W, and fits
-        # the experimental data.
+            a lower index (~0.54) at high power, indicating worse efficiency at high
+            power. To account this, the relation is modelled as a smoothly broken
+            power law that starts with an index of 2/3 at low powers and transitions
+            to an index of 0.54 above 70W '''
 
         power = (engine_power_level/100)*self.max_power
-        thrust = 0.1410 * power**0.5386
+        thrust = 0.08456613727390482 * power**(2/3) * (1+power/70)**(-0.12806666666666666)
 
         # At very low values, the motor won't spin so it won't create thrust
         if power < self.minimum_power:
@@ -91,9 +89,14 @@ class Kayak:
 
         # Realistic wind torque (a.k.a weathercocking), positive is to the right (clockwise if seen from above)
         if self.weather is not None:
+            # Set apparent wind speeds and directions due to the kayak motion
+            self.weather.apparent_wind_speed, self.weather.apparent_wind_heading_relative, \
+                self.weather.apparent_wind_heading_absolute = self.weather.apparent_wind(self.angle, self.speed)
+            # Calculate torques and
             wind_torque = self.weather.weathercocking(self.angle, self.speed, self.length)
-        else:
+        else: # if the weather is not defined
             wind_torque = 0
+            apparent_wind_heading_absolute = None
 
         # Calculate the net torque, positive is to the right (clockwise if seen from above)
         net_torque = engine_torque + wind_torque
@@ -116,4 +119,4 @@ class Kayak:
         self.angle += self.angular_velocity*dt + 0.5*angular_acceleration*dt**2
 
         # Return the new angle and angular velocity
-        return self.angle, self.angular_velocity, self.position, self.speed, self.acceleration
+        return self.angle, self.angular_velocity, self.position, self.speed, self.acceleration, self.weather.apparent_wind_heading_absolute

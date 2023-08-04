@@ -10,6 +10,12 @@ class Weather:
         self.weathercocking_constant = 0.01 # in m^-3, determines the magnitude of torque exerted by the wind
         self.water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
 
+        # Parameters that depend on kayak motion
+        self.apparent_wind_heading_relative = None  # incoming angle relative to nose of kayak (+ve incoming from the right, and -ve from the left)
+        self.apparent_wind_heading_absolute = None # same as above but as an absolute compass heading
+        self.apparent_wind_speed   = None  # apparent wind speed in the kayak frame of reference as a result of the combined kayak and wind motion
+
+
 
     def apparent_wind(self, kayak_heading, kayak_speed):
         ''' Calculate the apparent wind felt in the kayak as a result of the combined motion of
@@ -44,12 +50,15 @@ class Weather:
         apparent_speed = np.sqrt(apparent_vx**2 + apparent_vy**2)
         apparent_angle = np.rad2deg(np.arctan2(apparent_vy, apparent_vx))
 
+        # Apparent angle relative to NSEW
+        apparent_angle_NSEW = apparent_angle
+
         # Calculate the apparent wind angle relative to the kayak
         apparent_angle_relative_to_kayak = apparent_angle - kayak_heading
         apparent_angle_relative_to_kayak %= 360
 
         # Return apparent wind speed and direction relative to the kayak
-        return apparent_speed, apparent_angle_relative_to_kayak
+        return apparent_speed, apparent_angle_relative_to_kayak, apparent_angle_NSEW
 
 
     def wind_drag():
@@ -70,7 +79,7 @@ class Weather:
         # relative to the frame of reference of the kayak
 
         # Relative angle of wind hitting the kayak
-        apparent_speed, apparent_angle = self.apparent_wind(kayak_heading, kayak_speed) # km/h and deg
+        apparent_speed, apparent_angle, apparent_angle_NSEW = self.apparent_wind(kayak_heading, kayak_speed) # km/h and deg
 
         # Calculate the torque caused by the wind on the kayak
 
