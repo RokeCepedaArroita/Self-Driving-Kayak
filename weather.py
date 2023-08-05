@@ -50,19 +50,19 @@ class Weather:
         apparent_speed = np.sqrt(apparent_vx**2 + apparent_vy**2)
         apparent_angle = np.rad2deg(np.arctan2(apparent_vy, apparent_vx))
 
-        # Apparent angle relative to NSEW
-        apparent_angle_NSEW = apparent_angle
+        # Apparent angle relative to North-South-East-West
+        apparent_angle_absolute = apparent_angle
 
         # Calculate the apparent wind angle relative to the kayak
         apparent_angle_relative_to_kayak = apparent_angle - kayak_heading
         apparent_angle_relative_to_kayak %= 360
 
         # Return apparent wind speed and direction relative to the kayak
-        return apparent_speed, apparent_angle_relative_to_kayak, apparent_angle_NSEW
+        return apparent_speed, apparent_angle_relative_to_kayak, apparent_angle_absolute
 
 
     def wind_drag():
-        ''' TODO: Implement drag caused by wind. Need experimental tests to calibrate this '''
+        ''' TODO: Implement linear drag caused by wind. Need experimental tests to calibrate this '''
         return
 
 
@@ -75,32 +75,27 @@ class Weather:
             correction will be an underestimate of the torque exerted by the wind, in part
             accounting for the water '''
 
-        # Subtract the kayak motion from the wind motion to get the apparent wind speed and relative angle
-        # relative to the frame of reference of the kayak
+        # Relative angle of wind hitting the kayak from the frame of reference of the kayak
+        apparent_speed, apparent_angle, apparent_angle_absolute = self.apparent_wind(kayak_heading, kayak_speed) # km/h and deg
 
-        # Relative angle of wind hitting the kayak
-        apparent_speed, apparent_angle, apparent_angle_NSEW = self.apparent_wind(kayak_heading, kayak_speed) # km/h and deg
-
-        # Calculate the torque caused by the wind on the kayak
-
-        # In the definition of apparent angle, if positive, it should turn to the left,
-        # and if negative, it should turn to the right. This goes against the definition of
-        # torque in the initial kayak setup. Therefore we add another line to change the sign
-        self.weathercocking_torque = self.weathercocking_constant * apparent_speed**2 * (kayak_length/2) * np.sin( 2 * np.deg2rad(apparent_angle))
-        self.weathercocking_torque = -self.weathercocking_torque # make the torque directions consistent (e.g. positive torque turns to the right)
+        # Calculate the torque caused by the wind on the kayak:
+        # In the definition of apparent angle, if positive, it should turn the kayak to the left,
+        # and if negative, it should turn it to the right. This is the opposite as the definition of
+        # torque in the initial kayak setup. Therefore we add a minus sign (e.g. positive torque turns to the right)
+        self.weathercocking_torque = - self.weathercocking_constant * apparent_speed**2 * (kayak_length/2) * np.sin( 2 * np.deg2rad(apparent_angle))
 
         return self.weathercocking_torque
 
 
 
     def water_drag(self, kayak_speed, CdA):
-        ''' Simple model for the drag force of the water in Newtons when travelling forward.
-            CdA is the effective drag_coefficient times the effective cross sectional area,
-            which is measured experimentally. Note that the value of both A and Cd changes with
-            different orientations (e.g. a side-on kayak will have a higher drag coefficient), and
-            thus this value cannot be extrapolated to different orientations without real-world testing '''
+        ''' Simple model for the drag force of the water in Newtons when travelling at kayak_speed km/h.
+            CdA is the effective drag_coefficient times the effective cross sectional area, which is
+            measured experimentally. Note that the value of both A and Cd changes with different orientations
+            (e.g. a side-on kayak will have a higher drag coefficient), and thus this value cannot be
+            extrapolated to different orientations without real-world testing. '''
 
-        drag_force = 0.5 * self.water_density * (kayak_speed/3.6)**2 * CdA # Newtons, speed needs to be in m/s
+        drag_force = 0.5 * self.water_density * (kayak_speed/3.6)**2 * CdA # Newtons, input speed needs to be in km/h
 
         return drag_force # Newtons
 

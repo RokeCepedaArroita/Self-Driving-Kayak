@@ -52,13 +52,14 @@ def compass_stddev(readings):
     # Calculate the circular standard deviation
     circular_std_deviation = np.sqrt(-2 * np.log(1 - circular_variance))
     # Convert back to degrees
-    circular_std_deviation = circular_std_deviation*360/(2*np.pi)
+    circular_std_deviation = np.rad2deg(circular_std_deviation)
     return circular_std_deviation
 
-#
-#
-# # Test
-# compass_readings = [5,1, 359,355]
-# average_heading = compass_average(compass_readings)
-# circular_std_deviation = compass_stddev(compass_readings)
-# print(f"The average heading is: {average_heading:.2f}+-{circular_std_deviation:.2f} deg")
+
+def wrap_angles(angle, pos):
+    ''' Wrap angles to format axis labels correctly '''
+    wrapped_angle = int(np.round((angle) % 360))
+    if wrapped_angle == 0:
+        return '0'
+    else:
+        return str(wrapped_angle)

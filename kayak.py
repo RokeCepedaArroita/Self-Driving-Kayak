@@ -3,7 +3,7 @@ import numpy as np
 class Kayak:
     def __init__(self, length=3.46, effective_length=2.6, effective_width=0.7, mass=155,
                  center_of_mass=-0.141, engine_spacing=0.178, max_thrust=2.26, max_power=175,
-                 min_power=2, initial_angle=90, initial_angular_velocity=0, initial_speed=0, weather=None):
+                 min_power=2, initial_heading=90, initial_angular_velocity=0, initial_speed=0, weather=None):
 
         # Kayak parameters
         self.length  = length                      # m, total length
@@ -31,14 +31,14 @@ class Kayak:
         self.position = [0,0]                             # position in m
         self.speed = initial_speed                        # km/h
         self.acceleration = 0                             # m/s^2 (initial acceleration set to 0)
-        self.angle = initial_angle                        # heading in degrees
+        self.angle = initial_heading                        # heading in degrees
         self.angular_velocity = initial_angular_velocity  # deg/s
 
         # Weather
         self.weather = weather     # weather class with parameters and functions
 
-        # Calculate angular moment of inertia (maximum authority 2.3 deg/s^2 without reverse in my case)
-        self.I = (1/12) * self.mass * (self.effective_length**2 + self.width**2) # about 146 kg m^2
+        # Calculate angular moment of inertia (maximum authority ~3 deg/s^2 without reverse in my case)
+        self.I = (1/12) * self.mass * (self.effective_length**2 + self.width**2) # about 90 kg m^2
 
 
     def power_to_thrust(self, engine_power_level):
@@ -80,8 +80,8 @@ class Kayak:
         self.speed = (self.speed/3.6 + self.acceleration*dt)*3.6
 
         # Update the position in space in meters
-        self.position[0] += (self.speed/3.6)*np.cos(np.deg2rad(self.angle))*dt + 0.5*self.acceleration*np.cos(np.deg2rad(self.angle))*dt**2
-        self.position[1] += (self.speed/3.6)*np.sin(np.deg2rad(self.angle))*dt + 0.5*self.acceleration*np.sin(np.deg2rad(self.angle))*dt**2
+        self.position[1] += (self.speed/3.6)*np.cos(np.deg2rad(self.angle))*dt + 0.5*self.acceleration*np.cos(np.deg2rad(self.angle))*dt**2
+        self.position[0] += (self.speed/3.6)*np.sin(np.deg2rad(self.angle))*dt + 0.5*self.acceleration*np.sin(np.deg2rad(self.angle))*dt**2
 
 
         # Calculate the engine torque, positive is to the right (clockwise if seen from above)
@@ -101,7 +101,7 @@ class Kayak:
         # Calculate the net torque, positive is to the right (clockwise if seen from above)
         net_torque = engine_torque + wind_torque
 
-        # TODO: Implement a more realistic model of the rotational drag!!
+        # TODO: Implement a more realistic model of the rotational drag primarily caused by the back skegs!!
         # Simple rotational friction
         friction = 0.55
         if net_torque > 0:
@@ -119,4 +119,5 @@ class Kayak:
         self.angle += self.angular_velocity*dt + 0.5*angular_acceleration*dt**2
 
         # Return the new angle and angular velocity
-        return self.angle, self.angular_velocity, self.position, self.speed, self.acceleration, self.weather.apparent_wind_heading_absolute
+        return self.angle, self.angular_velocity, self.position, self.speed, self.acceleration, \
+               self.weather.apparent_wind_heading_absolute, self.position
