@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class Simulator:
-    def __init__(self, timestep=0.1, simulated_time=60, kayak=None, weather=None, autopilot=None, plot=False):
+    def __init__(self, timestep=0.08, simulated_time=60, kayak=None, weather=None, autopilot=None, plot=False):
 
         # Simulation parameters
         self.timestep = timestep              # s, time interval at which physics and autopilot are simulated.
@@ -30,9 +30,9 @@ class Simulator:
                      'target_heading':                 []}
 
 
-        # TODO: INJECT REALISTIC SENSOR NOISE TO DETERMINE DEADBAND
-        self.sensor_noise = {'compass_heading': 0,
-                             'angular_speed'  : 0}
+        # TODO: Realistic sensor noise used to simulate sensor readings and determine the PID deadband
+        self.sensor_noise = {'compass_heading': 1.04,   # deg, 1 standard deviation
+                             'angular_speed'  : 0.017}  # deg/s, 1 standard deviation
 
 
 
