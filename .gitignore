@@ -5,4 +5,4 @@ others/
 __pycache__/
 figures/
 sensors/
-..gitattributes
+./.gitignore
