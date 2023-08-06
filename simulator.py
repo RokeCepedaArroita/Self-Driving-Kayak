@@ -72,6 +72,7 @@ class Simulator:
             if time > 8:
                 self.autopilot.target_heading = 0
             if time > 40:
+                # self.weather.wind_speed = 0
                 self.autopilot.target_heading = 35
             if time > 60:
                 self.autopilot.target_heading = 76
@@ -118,7 +119,7 @@ class Simulator:
         ax1.plot(self.data['time'], np.multiply(self.data['acceleration'],3.6*6), color='C3', linewidth=3, label='Acceleration (6*(km/h)/s)')
         ax1.axhline(y=maximum_speed, color='C0', linestyle='-', linewidth=10, alpha=0.15, label='Max Target Speed')
         ax1.axhline(y=0, color='k', linestyle='-', linewidth=1, alpha=0.15)
-        ax2.axvline(x=10, color='k', linestyle='-', linewidth=5, alpha=0.1)
+        ax1.axvline(x=10, color='k', linestyle='--', linewidth=2, alpha=0.1)
         ax1.set_ylabel('Speed and Acceleration')
         ax1.set_ylim([-1,7])
         ax1.set_xlim([0,np.max(self.data['time'])])
@@ -133,7 +134,7 @@ class Simulator:
                                 np.max([np.max(self.data['angle'])+10, np.nanmax(self.data['target_heading'])])]
 
         ax2.plot(self.data['time'], self.data['angle'], label='Kayak', linewidth=5)
-        ax2.axvline(x=10, color='k', linestyle='-', linewidth=5, alpha=0.1)
+        ax2.axvline(x=10, color='k', linestyle='--', linewidth=2, alpha=0.1)
         ax2.set_ylabel('Heading (deg)')
         for termination in [0,360,-360]:
             ax2.axhline(y=termination, color='k', linestyle='-', linewidth=1, alpha=0.8)
@@ -170,12 +171,14 @@ class Simulator:
 
 
         # Plot engine powers on the third subplot
-        ax3.plot(self.data['time'], self.data['right_engine_power'], color='r', label='Right')
-        ax3.plot(self.data['time'], self.data['left_engine_power'],  color='b', label='Left')
-        ax3.axvline(x=10, color='k', linestyle='-', linewidth=5, alpha=0.1)
+        combined_engine_power = np.add(self.data['right_engine_power'],self.data['left_engine_power'])
+        ax3.plot(self.data['time'], self.data['right_engine_power'], color='r', label='Right', zorder=1)
+        ax3.plot(self.data['time'], self.data['left_engine_power'],  color='b', label='Left', zorder=1)
+        plt.fill_between(self.data['time'], combined_engine_power, 0, alpha=0.1, color='black', label='Combined', zorder=0)
+        ax3.axvline(x=10, color='k', linestyle='--', linewidth=2, alpha=0.1)
         ax3.set_ylabel('Engine Power (%)')
         ax3.set_xlabel('Time (s)')
-        ax3.set_ylim([-5,105])
+        ax3.set_ylim([-1,101])
         ax3.set_xlim([0,np.max(self.data['time'])])
         ax3.legend()
         plt.tight_layout()
@@ -194,17 +197,17 @@ from kayak import Kayak
 from weather import Weather
 from autopilot import Autopilot
 
-# Initialize weather
+# Initialize weather: wind limit ~20
 weather = Weather(wind_speed=12, wind_heading=170)
 
 # Initialize kayak
-kayak = Kayak(initial_speed=0, initial_heading=180, weather=weather)
+kayak = Kayak(initial_speed=0, initial_heading=90, weather=weather)
 
 # Initialize autopilot (kp 16 and kd 45 is a good start)
-autopilot = Autopilot(kp=16, kd=45, ki=0, target_power=50, target_heading=180)
+autopilot = Autopilot(kp=16, kd=45, ki=2.0, smoothing_time=0.4, target_power=50, target_heading=125)
 
 # Initialize simulator
-simulator = Simulator(simulated_time=120, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
+simulator = Simulator(simulated_time=70, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
 
 data = simulator.simulate_kayak()
 
@@ -241,7 +244,7 @@ def update_plot(frame):
 
 
 # Create a figure
-fig, ax = plt.subplots(figsize=(10, 8))  # Adjust width and height as needed
+fig, ax = plt.subplots(figsize=(5, 4))  # Adjust width and height as needed
 
 
 # Set axis limits (adjust according to your data range)
@@ -274,7 +277,7 @@ cbar = plt.colorbar(sm, cax=cax)  # Use the ScalarMappable for the colorbar
 cbar.set_label('Speed (km/h)')
 
 # To save the animation as a video file (optional)
-# animation.save('position_animation.mp4', writer='ffmpeg')
+animation.save('position_animation.gif', writer='pillow')
 
 # Show the animation
 plt.show()
