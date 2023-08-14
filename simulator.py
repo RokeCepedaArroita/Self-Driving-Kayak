@@ -27,10 +27,14 @@ class Simulator:
                      'left_engine_power' :             [],
                      'right_engine_power':             [],
                      'apparent_wind_heading_absolute': [],
-                     'target_heading':                 []}
+                     'target_heading':                 [],
+                     'simulated_heading':              [],
+                     'filtered_heading':               [],
+                     'simulated_angular_speed':        [],
+                     'filtered_angular_speed':         []}
 
 
-        # TODO: Realistic sensor noise used to simulate sensor readings and determine the PID deadband
+        # Realistic sensor noise used to simulate sensor readings and determine the PID deadband
         self.sensor_noise = {'compass_heading': 1.04,   # deg, 1 standard deviation
                              'angular_speed'  : 0.017}  # deg/s, 1 standard deviation
 
@@ -44,6 +48,17 @@ class Simulator:
             raise ValueError(f"Invalid data type: {data_type}")
 
 
+    # Simulate sensors
+    def simulate_sensors(self, heading, angular_speed):
+        ''' Simulate sensor noise '''
+        heading = np.random.normal(loc=heading, scale=self.sensor_noise['compass_heading'])
+        angular_speed = np.random.normal(loc=angular_speed, scale=self.sensor_noise['angular_speed'])
+        # Constrain heading between 0 and 360
+        #heading %= 360
+        return heading, angular_speed
+
+
+
     # Simulation function
     def simulate_kayak(self):
         ''' Run simulation of kayak '''
@@ -54,8 +69,11 @@ class Simulator:
         # Simulate
         for step in np.arange(0, np.round(self.simulated_time / self.timestep)):
 
+            # Simulate sensor noise
+            simulated_heading, simulated_angular_speed = self.simulate_sensors(self.kayak.angle, self.kayak.angular_velocity)
+
             # Control
-            left_engine_power, right_engine_power = self.autopilot.PIDController(self.kayak.angle, self.kayak.angular_velocity)
+            left_engine_power, right_engine_power = self.autopilot.PIDController(simulated_heading, simulated_angular_speed)
 
             # Effect
             angle, angular_velocity, position, speed, acceleration, apparent_wind_heading_absolute, position = \
@@ -64,21 +82,21 @@ class Simulator:
             # Advance time
             time = time + self.timestep
 
-            # Sudden change
-            if time > 0:
-                self.autopilot.target_heading = 180
-            if time > 5:
-                self.autopilot.target_heading = 270
-            if time > 8:
-                self.autopilot.target_heading = 0
-            if time > 40:
-                # self.weather.wind_speed = 0
-                self.autopilot.target_heading = 35
-            if time > 60:
-                self.autopilot.target_heading = 76
-            if time > 90:
-                self.autopilot.target_heading = None
-                self.autopilot.target_power = 0
+            # # Sudden change
+            # if time > 0:
+            #     self.autopilot.target_heading = 180
+            # if time > 5:
+            #     self.autopilot.target_heading = 270
+            # if time > 8:
+            #     self.autopilot.target_heading = 0
+            # if time > 40:
+            #     # self.weather.wind_speed = 0
+            #     self.autopilot.target_heading = 35
+            # if time > 60:
+            #     self.autopilot.target_heading = 76
+            # if time > 90:
+            #     self.autopilot.target_heading = None
+            #     self.autopilot.target_power = 0
 
             # Unpack positions
             position_x, position_y = position
@@ -94,7 +112,11 @@ class Simulator:
                 ('left_engine_power', left_engine_power),
                 ('right_engine_power', right_engine_power),
                 ('apparent_wind_heading_absolute', apparent_wind_heading_absolute),
-                ('target_heading', self.autopilot.target_heading) ]
+                ('target_heading', self.autopilot.target_heading),
+                ('simulated_heading', simulated_heading),
+                ('filtered_heading', self.autopilot.filtered_heading),
+                ('simulated_angular_speed', simulated_angular_speed),
+                ('filtered_angular_speed', self.autopilot.filtered_angular_velocity)]
             for data_type, value in data_to_add:
                 self.add_data(data_type, value)
 
@@ -133,7 +155,9 @@ class Simulator:
         heading_plot_ylimits = [np.min([np.min(self.data['angle'])-10, np.nanmin(self.data['target_heading'])]) , \
                                 np.max([np.max(self.data['angle'])+10, np.nanmax(self.data['target_heading'])])]
 
-        ax2.plot(self.data['time'], self.data['angle'], label='Kayak', linewidth=5)
+        ax2.plot(self.data['time'], self.data['angle'], label='Kayak', linewidth=5, zorder=0)
+        ax2.plot(self.data['time'], self.data['simulated_heading'], color='C3', label='Sensor Data', linewidth=2, alpha=0.2, zorder=1)
+        ax2.plot(self.data['time'], self.data['filtered_heading'], color='C2', label='Filtered Data', linewidth=2, alpha=0.2, zorder=1)
         ax2.axvline(x=10, color='k', linestyle='--', linewidth=2, alpha=0.1)
         ax2.set_ylabel('Heading (deg)')
         for termination in [0,360,-360]:
@@ -185,6 +209,7 @@ class Simulator:
 
         plt.show()
 
+
         return
 
 
@@ -201,10 +226,10 @@ from autopilot import Autopilot
 weather = Weather(wind_speed=12, wind_heading=170)
 
 # Initialize kayak
-kayak = Kayak(initial_speed=0, initial_heading=90, weather=weather)
+kayak = Kayak(initial_speed=0, initial_heading=10, weather=weather)
 
 # Initialize autopilot (kp 16 and kd 45 is a good start)
-autopilot = Autopilot(kp=16, kd=45, ki=2.0, smoothing_time=0.4, target_power=50, target_heading=125)
+autopilot = Autopilot(kp=16, kd=45, ki=2.0, smoothing_time=0.4, target_power=50, target_heading=0)
 
 # Initialize simulator
 simulator = Simulator(simulated_time=70, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
@@ -212,83 +237,83 @@ simulator = Simulator(simulated_time=70, kayak=kayak, weather=weather, autopilot
 data = simulator.simulate_kayak()
 
 
-
-
-
-# Animate position below
-
-from matplotlib.animation import FuncAnimation
-
-def update_plot(frame):
-    # Choose the update interval (e.g., update every 5 frames)
-    update_interval = 15
-    sc = None
-    # Only update the plot when the frame is a multiple of the update_interval
-    if frame % update_interval == 0 or frame == len(data['time']) - 1:
-        # Clear the previous scatter object if it exists
-        if sc is not None:
-            sc.remove()
-        # Get the colormap and norm
-        cmap = plt.get_cmap('viridis')
-        norm = plt.Normalize(np.min(data['speed']), np.max(data['speed']))
-        # Get the color for each point based on speed
-        color = cmap(norm(data['speed'][frame]))
-        # Use scatter to plot the data with color based on speed
-        sc = ax.plot(data['position_x'][frame], data['position_y'][frame], linestyle='', marker='o', color=color)
-        # sc = ax.scatter(data['position_x'][frame + 1], data['position_y'][frame + 1], color=color, marker='o')
-        # Timer text
-        timer_text.set_text('Time: {:.2f} seconds'.format(data['time'][frame]))
-
-    return sc  # Return the scatter object to be used by the colorbar
-
-
-
-# Create a figure
-fig, ax = plt.subplots(figsize=(5, 4))  # Adjust width and height as needed
-
-
-# Set axis limits (adjust according to your data range)
-ax.set_xlim([np.min(data['position_x'])-2, np.max(data['position_x'])+2])
-ax.set_ylim([np.min(data['position_y'])-2, np.max(data['position_y'])+2])
-ax.set_ylabel('South-North (m)')
-ax.set_xlabel('West-East (m)')
-ax.set_aspect('equal')
-ax.grid(True)
-
-# Add the timer text
-timer_text = ax.text(0.02, 0.95, '', transform=ax.transAxes, fontsize=12, color='black')
-
-# Create the animation
-animation = FuncAnimation(fig, update_plot, frames=len(data['time']), interval=5, repeat=False)
-
-# Get the colormap and norm
-cmap = plt.get_cmap('viridis')
-norm = plt.Normalize(np.min(data['speed']), np.max(data['speed']))
-
-# Create a ScalarMappable with the colormap and norm
-sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-
-# Set the data for the ScalarMappable, but we only need the colorbar, so an arbitrary data point is sufficient
-sm.set_array(data['speed'])
-
-# Add a colorbar next to the plot
-cax = plt.axes([0.92, 0.1, 0.02, 0.8])  # [left, bottom, width, height]
-cbar = plt.colorbar(sm, cax=cax)  # Use the ScalarMappable for the colorbar
-cbar.set_label('Speed (km/h)')
-
-# To save the animation as a video file (optional)
-animation.save('position_animation.gif', writer='pillow')
-
-# Show the animation
-plt.show()
-
-
-
-
-
-
-
-
-# Fastest time for 90 deg turn is 8.80 s
-
-# KP 10, KD 85
+#
+#
+#
+# # Animate position below
+#
+# from matplotlib.animation import FuncAnimation
+#
+# def update_plot(frame):
+#     # Choose the update interval (e.g., update every 5 frames)
+#     update_interval = 15
+#     sc = None
+#     # Only update the plot when the frame is a multiple of the update_interval
+#     if frame % update_interval == 0 or frame == len(data['time']) - 1:
+#         # Clear the previous scatter object if it exists
+#         if sc is not None:
+#             sc.remove()
+#         # Get the colormap and norm
+#         cmap = plt.get_cmap('viridis')
+#         norm = plt.Normalize(np.min(data['speed']), np.max(data['speed']))
+#         # Get the color for each point based on speed
+#         color = cmap(norm(data['speed'][frame]))
+#         # Use scatter to plot the data with color based on speed
+#         sc = ax.plot(data['position_x'][frame], data['position_y'][frame], linestyle='', marker='o', color=color)
+#         # sc = ax.scatter(data['position_x'][frame + 1], data['position_y'][frame + 1], color=color, marker='o')
+#         # Timer text
+#         timer_text.set_text('Time: {:.2f} seconds'.format(data['time'][frame]))
+#
+#     return sc  # Return the scatter object to be used by the colorbar
+#
+#
+#
+# # Create a figure
+# fig, ax = plt.subplots(figsize=(5, 4))  # Adjust width and height as needed
+#
+#
+# # Set axis limits (adjust according to your data range)
+# ax.set_xlim([np.min(data['position_x'])-2, np.max(data['position_x'])+2])
+# ax.set_ylim([np.min(data['position_y'])-2, np.max(data['position_y'])+2])
+# ax.set_ylabel('South-North (m)')
+# ax.set_xlabel('West-East (m)')
+# ax.set_aspect('equal')
+# ax.grid(True)
+#
+# # Add the timer text
+# timer_text = ax.text(0.02, 0.95, '', transform=ax.transAxes, fontsize=12, color='black')
+#
+# # Create the animation
+# animation = FuncAnimation(fig, update_plot, frames=len(data['time']), interval=5, repeat=False)
+#
+# # Get the colormap and norm
+# cmap = plt.get_cmap('viridis')
+# norm = plt.Normalize(np.min(data['speed']), np.max(data['speed']))
+#
+# # Create a ScalarMappable with the colormap and norm
+# sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+#
+# # Set the data for the ScalarMappable, but we only need the colorbar, so an arbitrary data point is sufficient
+# sm.set_array(data['speed'])
+#
+# # Add a colorbar next to the plot
+# cax = plt.axes([0.92, 0.1, 0.02, 0.8])  # [left, bottom, width, height]
+# cbar = plt.colorbar(sm, cax=cax)  # Use the ScalarMappable for the colorbar
+# cbar.set_label('Speed (km/h)')
+#
+# # To save the animation as a video file (optional)
+# animation.save('position_animation.gif', writer='pillow')
+#
+# # Show the animation
+# plt.show()
+#
+#
+#
+#
+#
+#
+#
+#
+# # Fastest time for 90 deg turn is 8.80 s
+#
+# # KP 10, KD 85

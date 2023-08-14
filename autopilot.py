@@ -4,6 +4,8 @@ import numpy as np
 class Autopilot:
     def __init__(self, kp, ki, kd, timestep=0.08, smoothing_time=0, target_power=0, target_heading=None):
 
+        from kalmanfilter import KalmanFilter
+
         # PID control loop parameters
         self.kp = kp  # proportional gain
         self.ki = ki  # integral gain
@@ -13,14 +15,21 @@ class Autopilot:
         self.smoothing_time = smoothing_time # s, typical output smoothing time
         self.timestep       = timestep       # s, time equivalent to the control frequency
 
+        # Sensor noise estimates
+        self.sensor_noise = {'compass_heading': 1.04,   # deg, 1 standard deviation
+                             'angular_speed'  : 0.017}  # deg/s, 1 standard deviation
+
         # Initialize variables
-        self.integral = 0 # integral term
-        self.previous_left_engine_power  = 0 # previous left power
-        self.previous_right_engine_power = 0 # previous right power
+        self.integral = 0                      # integral term
+        self.previous_left_engine_power  = 0   # previous left power
+        self.previous_right_engine_power = 0   # previous right power
 
         # Kayak autopilot settings
         self.target_power    = target_power     # combined power level % (0-200)
         self.target_heading  = target_heading   # desired heading in deg (0-360)
+
+        # Initialize Kalman Filter
+        self.kalmanfilter = KalmanFilter(self.sensor_noise['compass_heading'], self.sensor_noise['angular_speed'])
 
 
 
@@ -32,41 +41,34 @@ class Autopilot:
 
         if self.target_heading is not None: # If autopilot is on
 
-            # Measure the angle difference, positive means we have to turn right
-            error = shortest_angle_difference(current_heading, self.target_heading)
+            # Filter sensor readings with Kalman Filter
+            self.kalmanfilter.predict(self.timestep)
+            self.kalmanfilter.update(np.array([current_heading, angular_velocity]))
 
-            # TODO: Integral term, and reset it from time to time or have a moving integral maybe??
-            # Calculate the integral term.
-
-            # ONLY CONSIDER THE LAST 10 SECONDS OF THE INTEGRAL!!
-
-
-            if self.previous_left_engine_power!=max_power and self.previous_left_engine_power!=max_power:
-                # Only add to the integral term if we are at a steady-ish state?
-                self.integral += error * self.timestep
-                # Clamp the values of the integral to represent only a maximum autority of 100%
-                self.integral = max(min(self.integral,  max_power/self.ki), -max_power/self.ki)
-
-                
-
-            # Saturation handling: if any of the motors is at 100%, do not increase the integral term
+            # Get filtered readings
+            self.filtered_heading, self.filtered_angular_velocity = self.kalmanfilter.x
 
 
-            # Add clamping so that the integral term does not increase if the motors are saturated
+            print(f'{current_heading:.1f},{self.filtered_heading:.1f}')
 
+            # self.filtered_heading, self.filtered_angular_velocity = current_heading, angular_velocity
 
+            # Measure the angle difference, positive means we have to turn right: use filtered readings in PID control loop
+            error = shortest_angle_difference(self.filtered_heading, self.target_heading)
 
-            # TODO: To add a deadband, you can modify the P component as follows:
-            #
-            # if |error| <= deadband:
-            # P = 0
-            # else:
-            # P = Kp * error
-
+            # Integral term activates within 45 deg of target
+            if np.abs(error) < 45:
+                # Saturation handling: if any of the motors is at 100%, do not increase the integral term
+                if self.previous_left_engine_power!=max_power and self.previous_left_engine_power!=max_power:
+                    self.integral += error * self.timestep
+                    # Clamp the values of the integral to represent only a maximum autority of 100%
+                    self.integral = max(min(self.integral,  max_power/self.ki), -max_power/self.ki)
+            else: # If outside 45 deg, reset the integral
+                self.integral = 0
 
             # If error positive, left engine to full, otherwise reverse
-            left_engine_power  = +self.kp*error  - self.kd*angular_velocity + self.ki*self.integral
-            right_engine_power = -self.kp*error  + self.kd*angular_velocity - self.ki*self.integral
+            left_engine_power  = +self.kp*error  - self.kd*self.filtered_angular_velocity + self.ki*self.integral
+            right_engine_power = -self.kp*error  + self.kd*self.filtered_angular_velocity - self.ki*self.integral
 
             # Smooth output with a low pass filter
             if self.smoothing_time > 0:
@@ -88,7 +90,6 @@ class Autopilot:
         right_engine_power = max(min(right_engine_power, max_power), 0)
 
 
-
         # Adjust output to maintain some minimum value of forward thrust at all times
         if left_engine_power+right_engine_power < self.target_power:
             # Calculate the combined power deficit (e.g. 50 means that each engine should be running 25% higher)
@@ -98,7 +99,6 @@ class Autopilot:
             # Maintain PID difference while adding the fraction of available_power needed to both engines
             left_engine_power  = left_engine_power  + min(available_power, power_deficit/2)
             right_engine_power = right_engine_power + min(available_power, power_deficit/2)
-
 
         # Copy previous engine powers
         self.previous_left_engine_power = left_engine_power
