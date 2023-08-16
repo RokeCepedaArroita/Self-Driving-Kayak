@@ -2,7 +2,7 @@ from angular_tools import shortest_angle_difference
 import numpy as np
 
 class Autopilot:
-    def __init__(self, kp, ki, kd, timestep=0.08, smoothing_time=0, target_power=0, target_heading=None):
+    def __init__(self, kp, ki, kd, timestep=0.08, smoothing_time=0, derivative_smoothing_time=0, target_power=0, target_heading=None):
 
         from kalmanfilter import KalmanFilter
 
@@ -12,8 +12,9 @@ class Autopilot:
         self.kd = kd  # derivative gain
 
         # PID smoothing parameters
-        self.smoothing_time = smoothing_time # s, typical output smoothing time
-        self.timestep       = timestep       # s, time equivalent to the control frequency
+        self.timestep                  = timestep                  # s, time equivalent to the control frequency
+        self.smoothing_time            = smoothing_time            # s, typical output smoothing time
+        self.derivative_smoothing_time = derivative_smoothing_time # s, typical derivative smoothing time
 
         # Sensor noise estimates
         self.sensor_noise = {'compass_heading': 1.04,   # deg, 1 standard deviation
@@ -21,6 +22,7 @@ class Autopilot:
 
         # Initialize variables
         self.integral = 0                      # integral term
+        self.derivative = 0                    # previous derivative term
         self.previous_left_engine_power  = 0   # previous left power
         self.previous_right_engine_power = 0   # previous right power
 
@@ -29,7 +31,7 @@ class Autopilot:
         self.target_heading  = target_heading   # desired heading in deg (0-360)
 
         # Initialize Kalman Filter
-        self.kalmanfilter = KalmanFilter(self.sensor_noise['compass_heading'], self.sensor_noise['angular_speed'])
+        self.kalmanfilter = KalmanFilter(self.sensor_noise['compass_heading'], self.sensor_noise['angular_speed'], self.timestep)
 
 
 
@@ -42,16 +44,11 @@ class Autopilot:
         if self.target_heading is not None: # If autopilot is on
 
             # Filter sensor readings with Kalman Filter
-            self.kalmanfilter.predict(self.timestep)
-            self.kalmanfilter.update(np.array([current_heading, angular_velocity]))
+            self.kalmanfilter.predict()
+            self.kalmanfilter.update([current_heading, angular_velocity])
 
             # Get filtered readings
             self.filtered_heading, self.filtered_angular_velocity = self.kalmanfilter.x
-
-
-            print(f'{current_heading:.1f},{self.filtered_heading:.1f}')
-
-            # self.filtered_heading, self.filtered_angular_velocity = current_heading, angular_velocity
 
             # Measure the angle difference, positive means we have to turn right: use filtered readings in PID control loop
             error = shortest_angle_difference(self.filtered_heading, self.target_heading)
@@ -66,9 +63,18 @@ class Autopilot:
             else: # If outside 45 deg, reset the integral
                 self.integral = 0
 
+
+            # Smooth derivative term to reduce noise in the output
+            if self.derivative_smoothing_time > 0:
+                alpha = 1 - np.exp(-self.timestep/self.derivative_smoothing_time)
+                self.derivative  = alpha * self.filtered_angular_velocity  + (1 - alpha) * self.derivative
+            else:
+                self.derivative = self.filtered_angular_velocity
+
+
             # If error positive, left engine to full, otherwise reverse
-            left_engine_power  = +self.kp*error  - self.kd*self.filtered_angular_velocity + self.ki*self.integral
-            right_engine_power = -self.kp*error  + self.kd*self.filtered_angular_velocity - self.ki*self.integral
+            left_engine_power  = +self.kp*error  - self.kd*self.derivative + self.ki*self.integral
+            right_engine_power = -self.kp*error  + self.kd*self.derivative - self.ki*self.integral
 
             # Smooth output with a low pass filter
             if self.smoothing_time > 0:

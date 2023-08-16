@@ -31,7 +31,8 @@ class Simulator:
                      'simulated_heading':              [],
                      'filtered_heading':               [],
                      'simulated_angular_speed':        [],
-                     'filtered_angular_speed':         []}
+                     'filtered_angular_speed':         [],
+                     'target_power':                   []}
 
 
         # Realistic sensor noise used to simulate sensor readings and determine the PID deadband
@@ -116,7 +117,8 @@ class Simulator:
                 ('simulated_heading', simulated_heading),
                 ('filtered_heading', self.autopilot.filtered_heading),
                 ('simulated_angular_speed', simulated_angular_speed),
-                ('filtered_angular_speed', self.autopilot.filtered_angular_velocity)]
+                ('filtered_angular_speed', self.autopilot.filtered_angular_velocity),
+                ('target_power', self.autopilot.target_power)]
             for data_type, value in data_to_add:
                 self.add_data(data_type, value)
 
@@ -189,16 +191,17 @@ class Simulator:
         # Set the custom y-axis tick labels
         from angular_tools import wrap_angles
         from matplotlib.ticker import FuncFormatter
-        ax2.yaxis.set_major_formatter(FuncFormatter(wrap_angles))
+        #ax2.yaxis.set_major_formatter(FuncFormatter(wrap_angles))
 
         ax2.legend(loc='upper right')
 
 
         # Plot engine powers on the third subplot
         combined_engine_power = np.add(self.data['right_engine_power'],self.data['left_engine_power'])
-        ax3.plot(self.data['time'], self.data['right_engine_power'], color='r', label='Right', zorder=1)
-        ax3.plot(self.data['time'], self.data['left_engine_power'],  color='b', label='Left', zorder=1)
-        plt.fill_between(self.data['time'], combined_engine_power, 0, alpha=0.1, color='black', label='Combined', zorder=0)
+        ax3.plot(self.data['time'], self.data['right_engine_power'], color='r', label='Right', zorder=2)
+        ax3.plot(self.data['time'], self.data['left_engine_power'],  color='b', label='Left', zorder=2)
+        plt.fill_between(self.data['time'], combined_engine_power, 0, alpha=0.1, color='black', label='Combined', zorder=1)
+        ax3.plot(self.data['time'], self.data['target_power'], linestyle=':', alpha=0.3, color='black', label='Target', zorder=0)
         ax3.axvline(x=10, color='k', linestyle='--', linewidth=2, alpha=0.1)
         ax3.set_ylabel('Engine Power (%)')
         ax3.set_xlabel('Time (s)')
@@ -223,13 +226,13 @@ from weather import Weather
 from autopilot import Autopilot
 
 # Initialize weather: wind limit ~20
-weather = Weather(wind_speed=12, wind_heading=170)
+weather = Weather(wind_speed=6, wind_heading=180)
 
 # Initialize kayak
-kayak = Kayak(initial_speed=0, initial_heading=10, weather=weather)
+kayak = Kayak(initial_speed=0, initial_heading=-45, weather=weather)
 
 # Initialize autopilot (kp 16 and kd 45 is a good start)
-autopilot = Autopilot(kp=16, kd=45, ki=2.0, smoothing_time=0.4, target_power=50, target_heading=0)
+autopilot = Autopilot(kp=16, kd=45, ki=2.0, smoothing_time=0.1, derivative_smoothing_time=0.4, target_power=25, target_heading=45)
 
 # Initialize simulator
 simulator = Simulator(simulated_time=70, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)

@@ -1,15 +1,17 @@
 import numpy as np
 
 class KalmanFilter:
-    def __init__(self, sigma_compass, sigma_angular_velocity):
+    def __init__(self, sigma_compass, sigma_angular_velocity, dt):
 
         from angular_tools import shortest_angle_difference
+
+        self.dt = dt
 
         # Initial state -- this should be set to the starting value
         self.x = np.zeros(2)  # [compass, angular_velocity]
 
         # Process noise covariance -- this is like a systematic process error due to sensor noise
-        self.Q = np.diag([(sigma_angular_velocity*0.08)**2, sigma_angular_velocity**2]) # [0, sigma_angular_velocity**2] is also close enough when dt is small
+        self.Q = np.diag([(sigma_angular_velocity*self.dt)**2, sigma_angular_velocity**2]) # [0, sigma_angular_velocity**2] is also close enough when dt is small
 
         # Measurement noise covariance -- this is the error of your sensors
         self.R = np.diag([sigma_compass**2, sigma_angular_velocity**2])
@@ -23,10 +25,10 @@ class KalmanFilter:
 
         self.shortest_angle_difference = shortest_angle_difference
 
-    def predict(self, dt):
+    def predict(self):
         # State transition matrix
-        F = np.array([[1, dt],
-                      [0, 1 ]])
+        F = np.array([[1, self.dt],
+                      [0, 1      ]])
 
         # Predicted (a priori) state estimate
         self.x = np.matmul(F, self.x)
