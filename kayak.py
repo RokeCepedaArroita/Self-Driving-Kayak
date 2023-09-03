@@ -26,6 +26,7 @@ class Kayak:
         self.overall_efficiency = 0.206            # overall propulsion efficiency in converting power to forward push force (includes electrical, motor friction and propeller losses)
         self.twin_engine_drag_penalty = 1.113      # drag penalty incurred by placing a second engine
         self.CdA = 0.101*self.overall_efficiency*self.twin_engine_drag_penalty  # m^2, effective drag_coefficient*effective_cross_sectional_area, standard deviation is 18%
+        self.turning_drag = 0.026 # Nm/(deg/s)^2, opposing torque proportional to angular_speed^2 caused primarily by back skegs hitting the water at an angle, experimentally calibrated (does not take speed into account)
 
         # Kinematics
         self.position = [0,0]                             # position in m
@@ -61,6 +62,21 @@ class Kayak:
         return thrust # in kg
 
 
+    def turning_drag_torque(self, net_torque):
+        ''' Simple model that simulates the opposition to turning produced by the skegs.
+            net_torque is the combined torque of the motors and wind in Nm, the angular
+            velocity is in deg/s and turning_drag is also returned in Nm. More generally,
+            the drag could be modelled as (D + C v + E alpha) omega**2 where v is the
+            linear speed and alpha is the fixed angle of attack, and E-D-C are constants
+            The omega**2 relationship comes from sin^2(x) ≈ x^2 at low x,
+            where x is the angle of attack '''
+
+        # Turning drag always has a sign opposite to angular velocity
+        turning_drag = -self.turning_drag*np.sign(self.angular_velocity)*(self.angular_velocity)**2
+
+        return turning_drag
+
+
     def update(self, left_engine_power, right_engine_power, dt):
         ''' Update linear movement and rotation using Euler's method '''
 
@@ -83,7 +99,6 @@ class Kayak:
         self.position[1] += (self.speed/3.6)*np.cos(np.deg2rad(self.angle))*dt + 0.5*self.acceleration*np.cos(np.deg2rad(self.angle))*dt**2
         self.position[0] += (self.speed/3.6)*np.sin(np.deg2rad(self.angle))*dt + 0.5*self.acceleration*np.sin(np.deg2rad(self.angle))*dt**2
 
-
         # Calculate the engine torque, positive is to the right (clockwise if seen from above)
         engine_torque = (left_thrust - right_thrust) * self.engine_spacing
 
@@ -101,15 +116,10 @@ class Kayak:
         # Calculate the net torque, positive is to the right (clockwise if seen from above)
         net_torque = engine_torque + wind_torque
 
-        # TODO: Implement a more realistic model of the rotational drag primarily caused by the back skegs!!
-        # Simple rotational friction
-        friction = 0.55
-        if net_torque > 0:
-            net_torque += +friction*self.angular_velocity
-        if net_torque < 0:
-            net_torque += -friction*self.angular_velocity
+        # Apply simple rotational friction caused by the back skegs
+        net_torque += self.turning_drag_torque(net_torque)
 
-        # Calculate angular acceleration in deg/s**2, positive is to the right (clockwise if seen from above)
+        # Calculate the net angular acceleration in deg/s**2, positive is to the right (clockwise if seen from above)
         angular_acceleration = np.rad2deg(net_torque / self.I)
 
         # Update the angular velocity in deg/s

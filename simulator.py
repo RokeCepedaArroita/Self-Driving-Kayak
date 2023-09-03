@@ -122,6 +122,11 @@ class Simulator:
             for data_type, value in data_to_add:
                 self.add_data(data_type, value)
 
+            if -269.5 > angle > -270.5:
+                print(f'At {time:.1f} s I am at {angle:.2f} deg, moving at {angular_velocity:.1f} deg/s')
+            if 89.5 < angle < 90.5 and time < 30:
+                print(f'At {time:.1f} s I am at {angle:.2f} deg, moving at {angular_velocity:.1f} deg/s')
+
         # Plot simulation
         if self.plot:
             self.plot_simulation()
@@ -225,17 +230,17 @@ from kayak import Kayak
 from weather import Weather
 from autopilot import Autopilot
 
-# Initialize weather: wind limit ~20
-weather = Weather(wind_speed=6, wind_heading=180)
+# Initialize weather: wind limit 28 km/h
+weather = Weather(wind_speed=17, wind_heading=180)
 
 # Initialize kayak
-kayak = Kayak(initial_speed=0, initial_heading=-45, weather=weather)
+kayak = Kayak(initial_speed=0, initial_heading=45, weather=weather)
 
-# Initialize autopilot (kp 16 and kd 45 is a good start)
-autopilot = Autopilot(kp=16, kd=45, ki=2.0, smoothing_time=0.1, derivative_smoothing_time=0.4, target_power=25, target_heading=45)
+# Initialize autopilot (Pessen: kp=49, kd=68, ki=13, Classic: kp=42, kd=49, ki=9, No overshoot: kp=14, kd=43, ki=3, Some Overshoot: kp=23, kd=72, ki=5)
+autopilot = Autopilot(kp=49, kd=68, ki=13, smoothing_time=0.1, derivative_smoothing_time=0.4, target_power=25, target_heading=135)
 
 # Initialize simulator
-simulator = Simulator(simulated_time=70, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
+simulator = Simulator(simulated_time=100, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
 
 data = simulator.simulate_kayak()
 

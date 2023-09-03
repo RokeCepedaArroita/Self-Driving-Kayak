@@ -53,16 +53,11 @@ class Autopilot:
             # Measure the angle difference, positive means we have to turn right: use filtered readings in PID control loop
             error = shortest_angle_difference(self.filtered_heading, self.target_heading)
 
-            # Integral term activates within 45 deg of target
-            if np.abs(error) < 45:
-                # Saturation handling: if any of the motors is at 100%, do not increase the integral term
-                if self.previous_left_engine_power!=max_power and self.previous_left_engine_power!=max_power:
-                    self.integral += error * self.timestep
-                    # Clamp the values of the integral to represent only a maximum autority of 100%
-                    self.integral = max(min(self.integral,  max_power/self.ki), -max_power/self.ki)
-            else: # If outside 45 deg, reset the integral
-                self.integral = 0
-
+            # Saturation handling: if any of the motors is at 100%, do not increase the integral term
+            if self.previous_left_engine_power!=max_power and self.previous_left_engine_power!=max_power and self.ki!=0:
+                self.integral += error * self.timestep
+                # Clamp the values of the integral to represent only a maximum autority of 100%
+                self.integral = max(min(self.integral, max_power/self.ki), -max_power/self.ki)
 
             # Smooth derivative term to reduce noise in the output
             if self.derivative_smoothing_time > 0:

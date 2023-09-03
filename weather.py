@@ -3,11 +3,11 @@ from angular_tools import shortest_angle_difference
 
 class Weather:
     def __init__(self, wind_speed=0, wind_heading=0, current=0, current_direction=0):
-        self.wind_speed = wind_speed # in km/h
+        self.wind_speed = wind_speed # in km/h, control maximum is about 28 km/h
         self.wind_heading = wind_heading # deg
         self.current = current # in km/h
         self.current_direction = current_direction # deg
-        self.weathercocking_constant = 0.01 # in m^-3, determines the magnitude of torque exerted by the wind
+        self.weathercocking_constant = 0.0037 # in m^-3, determines the magnitude of torque exerted by the wind
         self.water_density = 1010.5  # kg/m^3, 997 for fresh water, 1025 for sea water
 
         # Parameters that depend on kayak motion
@@ -117,9 +117,3 @@ class Weather:
         terminal_speed = terminal_speed*3.6 # convert to km/h
 
         return terminal_speed # km/h
-
-
-
-    def water_torque(self):
-        ''' TODO: simulates the opposition to turning produced by the skegs '''
-        return
