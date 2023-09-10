@@ -62,7 +62,8 @@ class Weather:
 
 
     def wind_drag():
-        ''' TODO: Implement linear drag caused by wind. Need experimental tests to calibrate this '''
+        ''' TODO: Implement linear drag caused by wind. Need experimental tests to calibrate this
+            since the magnitude of the force depends on the orientation of the kayak. '''
         return
 
 

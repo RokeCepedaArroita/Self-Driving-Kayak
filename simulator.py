@@ -5,16 +5,17 @@ import matplotlib.pyplot as plt
 
 
 class Simulator:
-    def __init__(self, timestep=0.08, simulated_time=60, kayak=None, weather=None, autopilot=None, plot=False):
+    def __init__(self, timestep=0.08, simulated_time=60, kayak=None, weather=None, autopilot=None, disturbance=None, plot=False):
 
         # Simulation parameters
         self.timestep = timestep              # s, time interval at which physics and autopilot are simulated.
         self.simulated_time = simulated_time  # s, total duration to be simulated
         self.starting_time = 0                # s, starting time
-        self.kayak     = kayak                # kayak object
-        self.weather   = weather              # weather object
-        self.autopilot = autopilot            # autopilot object
-        self.plot      = plot                 # wether to plot the simulation or not (True/False)
+        self.kayak       = kayak              # kayak object
+        self.weather     = weather            # weather object
+        self.autopilot   = autopilot          # autopilot object
+        self.plot        = plot               # wether to plot the simulation or not (True/False)
+        self.disturbance = disturbance        # dictionary that redefines wind parameters at a specified time in s (e.g. {'time': 10, 'wind_speed': 20, 'wind_heading': 180})
 
         # Simulation data
         self.data = {'time':                           [],
@@ -83,7 +84,12 @@ class Simulator:
             # Advance time
             time = time + self.timestep
 
-            # # Sudden change
+            # Apply wind disturbances as a sudden change in wind speed/direction
+            if self.disturbance is not None:
+                if time > self.disturbance['time']:
+                    self.weather.wind_speed   = self.disturbance['wind_speed']
+                    self.weather.wind_heading = self.disturbance['wind_heading']
+
             # if time > 0:
             #     self.autopilot.target_heading = 180
             # if time > 5:
@@ -224,25 +230,25 @@ class Simulator:
 
 
 
-# Example simulation below
-
-from kayak import Kayak
-from weather import Weather
-from autopilot import Autopilot
-
-# Initialize weather: wind limit 28 km/h
-weather = Weather(wind_speed=17, wind_heading=180)
-
-# Initialize kayak
-kayak = Kayak(initial_speed=0, initial_heading=45, weather=weather)
-
-# Initialize autopilot (Pessen: kp=49, kd=68, ki=13, Classic: kp=42, kd=49, ki=9, No overshoot: kp=14, kd=43, ki=3, Some Overshoot: kp=23, kd=72, ki=5)
-autopilot = Autopilot(kp=49, kd=68, ki=13, smoothing_time=0.1, derivative_smoothing_time=0.4, target_power=25, target_heading=135)
-
-# Initialize simulator
-simulator = Simulator(simulated_time=100, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
-
-data = simulator.simulate_kayak()
+# # Example simulation below
+#
+# from kayak import Kayak
+# from weather import Weather
+# from autopilot import Autopilot
+#
+# # Initialize weather: wind limit 28 km/h
+# weather = Weather(wind_speed=17, wind_heading=180)
+#
+# # Initialize kayak
+# kayak = Kayak(initial_speed=0, initial_heading=45, weather=weather)
+#
+# # Initialize autopilot (Pessen: kp=49, kd=68, ki=13, Classic: kp=42, kd=49, ki=9, No overshoot: kp=14, kd=43, ki=3, Some Overshoot: kp=23, kd=72, ki=5)
+# autopilot = Autopilot(kp=49, kd=68, ki=13, smoothing_time=0.1, derivative_smoothing_time=0.4, target_power=25, target_heading=135)
+#
+# # Initialize simulator
+# simulator = Simulator(simulated_time=100, kayak=kayak, weather=weather, autopilot=autopilot, plot=True)
+#
+# data = simulator.simulate_kayak()
 
 
 #
