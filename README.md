@@ -4,11 +4,11 @@ This package includes code to assemble, simulate, optimize and implement an auto
 
 Below is an example of the simulated kayak making a turn and following the new heading autonomously, where time is on the horizontal axis. The top figure shows the speed and acceleration, the middle figure shows the heading of the kayak and the turning tendency imparted by wind, and the bottom plot shows the power commanded to each engine by the autopilot.
 
-![Kayak Simulated Control Demo](./examples/simulator_example.png)
+<img src="./examples/simulator_example.png" width="400">
 
 The application interface is easy to use and highly customisable:
 
-![Kayak App Preview](./examples/app.jpg)
+<img src="./examples/app.jpg" width="400">
 
 ## Features
 
