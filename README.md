@@ -8,7 +8,7 @@ Below is an example of the simulated kayak making a turn and following the new h
 
 The application interface is easy to use and highly customisable:
 
-![Kayak App Preview](./examples/app.png)
+![Kayak App Preview](./examples/app.jpg)
 
 ## Features
 
