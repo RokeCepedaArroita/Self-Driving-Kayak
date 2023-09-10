@@ -2,7 +2,7 @@
 
 This package includes code to assemble, simulate, optimize and implement an autonomous twin-engine kayak controlled by a smartphone. The kayak simulation suite, written in Python, uses kayak and weather (wind, current) parameters to realistically simulate the kinematics of a twin-engine kayak. Turning is achieved via differential thrust. The simulation suite includes a simulated PID control loop, which allows control parameters to be optimized for any kayak under any weather condition. The real-life control code is then implemented on an Arduino (C code provided), which uses pulse width modulation to control the output of each engine. The sensors and user interface are implemented on a mobile phone app (Android or iOS), from which the kayak is controlled via Bluetooth.
 
-Below is an example of the simulated kayak making a turn and following the new heading autonomously, where time is on the horizontal axis. The top figure shows the speed and acceleration, the middle figure shows the heading of the kayak and the turning tendency imparted by wind,
+Below is an example of the simulated kayak making a turn and following the new heading autonomously, where time is on the horizontal axis. The top figure shows the speed and acceleration, the middle figure shows the heading of the kayak and the turning tendency imparted by wind, and the bottom plot shows the power commanded to each engine by the autopilot.
 
 ![Kayak Simulated Control Demo](./examples/simulator_example.png)
 
