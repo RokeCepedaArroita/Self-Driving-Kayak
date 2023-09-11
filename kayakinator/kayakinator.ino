@@ -22,7 +22,6 @@ int autopilot_onoff, autopilot_mode;
 float target_power, heading, angular_speed, target_heading;
 
 // Timers and internal variables
-boolean newData = false;                // incoming data flag
 const int neutral_pwm = 1500;           // stores the neutral PWM value in microseconds
 float killswitch_start = millis();      // KILL TIMER: initiates a timer in milliseconds
 float killswitch_timer;                 // KILL TIMER: keep track of how long communications have been down
@@ -83,8 +82,9 @@ void loop() {
   // Process the data and command the motors
   process_message();
 
+
   // Send out diagnostic data to the app
-  send_data();
+  // send_data();
 
 
   // Serial.println(message1);
@@ -262,111 +262,180 @@ void process_message() {
 
 
 
+
+
+
+
 /*********************************
  *    DATA COMMUNICATION (IN)    *
  *********************************/
 
 
 
-void receive_data(int n_messages) {
-  // Receive multiple messages one at a time and set global message variables
 
-  for (int i = 0; i < n_messages; i++) { // do this for each message
+void wait_for_bluetooth_message(){
+  // Wait until the Bluetooth module (kayakinator) is sending data
 
-    // Checks if the Bluetooth module (kayakinator) is sending data
-    if (kayakinator.available() > 0) {
+  while (kayakinator.available() == 0) {
 
-      String receivedString = kayakinator.readStringUntil('>');
-      delayMicroseconds(400); // CAREFUL!!!!! Stable above 400 microseconds or more (may be able to go a little less, but not under 100 aprox), less than that generates too many bad/incomplete messages
-      newData = true;
-    
-      // Allocate messages and make sure they are in sync (e.g. each first message has its corresponding second message)
-      if  (receivedString.length() == 18 && receivedString.charAt(0) == '1') {
+    // Advance killswitch timer: time elapsed in milliseconds since the last loop when the Bluetooth device was available
+    killswitch_timer = millis() - killswitch_start;
 
-        if (i == 0) { // first message goes first, everything OK
-          message1 = receivedString;
-        }
-
-        else if (i == 1) { 
-          // first message goes second, do nothing
-        }
-
-      } 
-
-      else if  (receivedString.length() == 19 && receivedString.charAt(0) == '2') {
-
-        if (i == 0) {
-           i++;// second message goes first, do nothing
-        }
-
-        else if (i == 1) { // second message goes second, everything OK
-          message2 = receivedString;
-        }
-      
-      }
-
-      // Resets the not available timer to 0, since the status is currently available
-      killswitch_start = millis();
-
+    // If we have been disconnected long enough, turn off the engines
+    if (killswitch_timer > killswitch_time_ms) {
+      gradual_shutdown(); // turn off engines gradually
     }
 
-
-    // If the Bluetooth device is not available
-    else {
-
-      // Time elapsed in milliseconds since the last loop when the Bluetooth device was available
-      killswitch_timer = millis() - killswitch_start;
-
-      // If we have been disconnected long enough, turn off the engines
-      if (killswitch_timer > killswitch_time_ms) {
-        gradual_shutdown(); // turn off engines gradually
-      }
-
-    }
-
-
-    // Reset the newData variable and empty the serial input buffer
-    if (newData == true) {
-      newData = false;
-      kayakinator.read(); // ensure the Serial input buffer is empty
-    }
+    // Small delay
+    delayMicroseconds(200);
 
   }
-  
-
-
-  // Assign the data to variables
-  assign_data(message1, message2);
 
 }
 
 
+String read_and_flush(char ending_character) {
 
-void assign_data(String message1, String message2) {
-  // Combine both messages, extract values and assign to global variables
+  String receivedString;
 
-  // Check if the strings are in sync
-  if (message1.length() > 0 && message2.length() > 0 && message1.charAt(1) == message2.charAt(1)) {
+  wait_for_bluetooth_message();
 
+  if (kayakinator.available() > 0) {
+
+    receivedString = kayakinator.readStringUntil(ending_character);
+
+    // Add small delay to allow the Bluetooth module to catch up
+    // CAREFUL!!!!! Stable above 400 microseconds or more (may be able to go a little less, 
+    // but not under ~100 as too many bad/incomplete messages will be generated
+    delayMicroseconds(400);
+
+  }
+
+  return receivedString;
+
+}
+
+
+void synchronize_message() {
+
+  boolean ready_to_read = false; // incoming data availability flag
+
+  while (ready_to_read != true) { // while the first message is not seen
+    
+    // Wait until a message arrives
+    wait_for_bluetooth_message();
+
+    // Peek to see if the message starts with a 1
+    if (kayakinator.available() > 0) {
+
+      if (kayakinator.peek() == '1') {
+        ready_to_read = true;
+      }
+
+      else if (kayakinator.peek() == '2') {
+
+        // REMOVE BELOW
+        Serial.println("NOT SYNCHRONIZED");
+
+        // Erase the message and wait again until #1 appears
+        read_and_flush('>');
+
+        // Repeat until ready_to_read = true
+        ready_to_read = false;
+      }
+
+    }
+  }
+}
+
+
+
+
+void receive_data(int n_messages) {
+  // Receive multiple messages one at a time and set global message variables
+
+  // Wait until the first message appears
+  synchronize_message();
+
+  // Read both messages
+  for (int i = 0; i < n_messages; i++) {
+
+    // Receive message one by one
+    String receivedString = read_and_flush('>');
+  
+    // Allocate messages and make sure they are in sync (e.g. each first message has its corresponding second message)
+    if (i == 0) { // (receivedString.charAt(0) == '1') {
+      message1 = receivedString;
+    } 
+    
+
+    else if (i == 1) { //  (receivedString.charAt(0) == '2') {
+      message2 = receivedString;
+    }
+
+    // Resets the not available timer to 0, since we have just received a complete message
+    killswitch_start = millis();
+
+  }
+
+  // Assign the data to variables
+  if (check_messages(message1, message2) == true) {
+    
     // Unpack messages
     assign_variables(message1, message2);
-
+      
     // Get time interval of loop
-    message_interval = (micros() - energy_start_time)/1000;
+    message_interval = (micros() - message_start_time)/1000;
 
     // Restart timing loop
     message_start_time = micros();
 
+    // REMOVE BELOW
+    Serial.println(message_interval);
+    // Serial.print(" ms between succesful strings --- ");
+    // Serial.println("Succesfully received strings!");
     good_messages++;
+
+    
 
   }
 
   else {
-
+    // REMOVE BELOW
     bad_messages++;
     //Serial.println("Bad message");
+    Serial.println("");
+    Serial.println("!!!!!!!!!!!!!!!!!!!!!! BAD MESSAGES BELOW:");
+    Serial.println(message1);
+    Serial.println(message2);
+    Serial.println("");
   }
 
+
+}
+
+    
+
+
+
+
+    
+
+
+
+
+
+
+boolean check_messages(String message1, String message2) {
+  // Check if the strings are in sync
+  
+  boolean success = false;
+
+  if (message1.length() == 18 && message2.length() == 19 && message1.charAt(1) == message2.charAt(1)) {
+    success = true;
+  }
+
+  return success;
 }
 
 
