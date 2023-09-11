@@ -41,6 +41,9 @@ def steady_state_detector(simulator, maximum_deviation):
     as aggressive as possible '''
 
 
+    # Settling time as within X%?? Set maximum overshoot of 10 deg??
+
+
     return transition_time
 
 

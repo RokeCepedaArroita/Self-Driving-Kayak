@@ -27,8 +27,6 @@ const int neutral_pwm = 1500;           // stores the neutral PWM value in micro
 float killswitch_start = millis();      // KILL TIMER: initiates a timer in milliseconds
 float killswitch_timer;                 // KILL TIMER: keep track of how long communications have been down
 const float killswitch_time_ms = 5000;  // KILL TIMER: defines the kill time of the timer in milliseconds, can be edited by the user
-float energy_interval;                  // ENERGY TIMER: keeps track of cycles between motor changes to keep track of energy usage in the app
-float energy_start_time;                // ENERGY TIMER: start time of the energy interval timer
 float message_interval;                 // MESSAGE TIMER: keeps track of the time between consecutive incoming essages, used for the Kalman filter
 float message_start_time;               // MESSAGE TIMER: start time of the message interval timer
 
@@ -38,7 +36,14 @@ float PowerLevel_left;
 
 
 // Outgoing variables
+float energy_interval;                  // ENERGY TIMER: keeps track of cycles between motor changes to keep track of energy usage in the app
+float energy_start_time;                // ENERGY TIMER: start time of the energy interval timer
 
+
+// TODO: Remove these below
+// Internals to test while programming
+int bad_messages = 0;
+int good_messages = 0;
 
 
 void setup() {
@@ -65,7 +70,6 @@ void setup() {
 
 
 
-
 /***********************************
  *            MAIN LOOP            *
  ***********************************/
@@ -75,72 +79,29 @@ void loop() {
 
   // Receive and assign the data
   receive_data(2); // set the argument to the number of messages being received
-  assign_data(message1, message2);
 
   // Process the data and command the motors
+  process_message();
 
-  //kalmanFilter();
-  //autopilot();
-  //assignPower();
-
-  // Send out diagnostic data
+  // Send out diagnostic data to the app
   send_data();
 
 
+  // Serial.println(message1);
+  // Serial.println(message2);
+  // Serial.println("");
 
-  print_data();
-
-}
-
-
-// int autopilot_onoff, autopilot_mode;
-// float target_power, heading, angular_speed, target_heading;
+  // Print gyro, compass and message time interval values for noise characterization
+  //sensor_test();
 
 
-
-void processMessage () {
-
-  if (onoff == "N") {
-
-    // Single engine mode: only give power to the left engine on pin 6
-    if (single_twin == "S") {
-      set_power(target_power, 0);
-    }
-
-    // Twin engine mode: give power to both engines, either with or without autopilot
-    else if (single_twin == "T") {
-
-
-      if (autopilot_onoff == 0) { 
-        // Give equal power to both engines
-        set_power(target_power, target_power);
-
-      }
-
-      // AUTOPILOT ENGAGED
-      else if (autopilot_onoff == 1) { 
-
-      }
-
-
-
-
-
-    }
-
-  }
-
-
-  else if (onoff == "F") { // if off, shut down engines
-  gradual_shutdown();
-
-  }
-
-
-  // TODO: Measure the time interval of the loop in order to send back a message
-
+  //print_data();
 
 }
+
+
+
+
 
 
 
@@ -149,7 +110,7 @@ void processMessage () {
  *******************************/
 
 
-void autopilot() {
+void autopilot(float target_power, float target_heading, int autopilot_mode=1) {
 
 }
 
@@ -164,7 +125,7 @@ void autopilot() {
 
 
 
-void kalman_filter() {
+void kalman_filter(float previous_heading, float previous_angular_speed, float new_heading, float dt) {
 
 }
 
@@ -225,6 +186,7 @@ float PowerLevel_to_pwm(float PowerLevel) {
 }
 
 
+
 void gradual_shutdown(int delay_ms=50, float step_change=5) {
 
   // Check if either power level is greater than zero
@@ -248,6 +210,55 @@ void gradual_shutdown(int delay_ms=50, float step_change=5) {
 
 
 
+/***********************************
+ *         DATA PROCESSING         *
+ ***********************************/
+
+
+void process_message() {
+
+  if (onoff == "N") {
+
+    // Single engine mode: only give power to the left engine on pin 6
+    if (single_twin == "S") {
+      set_power(target_power, 0);
+    }
+
+    // Twin engine mode: give power to both engines, either with or without autopilot
+    else if (single_twin == "T") {
+
+
+      if (autopilot_onoff == 0) { 
+        // Give equal power to both engines
+        set_power(target_power, target_power);
+
+      }
+
+      // AUTOPILOT ENGAGED
+      else if (autopilot_onoff == 1) { 
+
+          //kalman_filter(heading, angular_speed, message_interval);
+          //autopilot();
+          //set_power(X,Y)
+
+      }
+
+
+
+
+
+    }
+
+  }
+
+
+  else if (onoff == "F") { // if off, shut down engines
+    gradual_shutdown();
+
+  }
+
+
+}
 
 
 
@@ -269,13 +280,29 @@ void receive_data(int n_messages) {
       delayMicroseconds(400); // CAREFUL!!!!! Stable above 400 microseconds or more (may be able to go a little less, but not under 100 aprox), less than that generates too many bad/incomplete messages
       newData = true;
     
-      // Allocate messages
+      // Allocate messages and make sure they are in sync (e.g. each first message has its corresponding second message)
       if  (receivedString.length() == 18 && receivedString.charAt(0) == '1') {
-        message1 = receivedString;
+
+        if (i == 0) { // first message goes first, everything OK
+          message1 = receivedString;
+        }
+
+        else if (i == 1) { 
+          // first message goes second, do nothing
+        }
+
       } 
 
       else if  (receivedString.length() == 19 && receivedString.charAt(0) == '2') {
-        message2 = receivedString;
+
+        if (i == 0) {
+           i++;// second message goes first, do nothing
+        }
+
+        else if (i == 1) { // second message goes second, everything OK
+          message2 = receivedString;
+        }
+      
       }
 
       // Resets the not available timer to 0, since the status is currently available
@@ -305,6 +332,11 @@ void receive_data(int n_messages) {
     }
 
   }
+  
+
+
+  // Assign the data to variables
+  assign_data(message1, message2);
 
 }
 
@@ -314,14 +346,24 @@ void assign_data(String message1, String message2) {
   // Combine both messages, extract values and assign to global variables
 
   // Check if the strings are in sync
-  if  ( message1.charAt(1) == message2.charAt(1) ) {
+  if (message1.length() > 0 && message2.length() > 0 && message1.charAt(1) == message2.charAt(1)) {
 
     // Unpack messages
     assign_variables(message1, message2);
 
+    // Get time interval of loop
+    message_interval = (micros() - energy_start_time)/1000;
+
+    // Restart timing loop
+    message_start_time = micros();
+
+    good_messages++;
+
   }
 
   else {
+
+    bad_messages++;
     //Serial.println("Bad message");
   }
 
@@ -350,7 +392,21 @@ void print_data() {
   Serial.println(target_heading);
 
 }
-  
+
+
+void sensor_test() {
+  // Print sensor data for testing
+  Serial.print(heading);
+  Serial.print(", ");
+  Serial.print(angular_speed, 3);
+  Serial.print(", ");
+  Serial.print(message_interval, 2);
+  Serial.print(", ");
+  Serial.print(good_messages);
+  Serial.print(", ");
+  Serial.print(bad_messages);
+  Serial.println(" ");
+}
 
 
 void assign_variables(String message1, String message2) {
@@ -369,8 +425,8 @@ void assign_variables(String message1, String message2) {
   String autopilot_mode_string = message1.substring(commaIndex1[3] + 1, commaIndex1[4]);
   String target_heading_string = message1.substring(commaIndex1[4] + 1, message1.length());
 
-  onoff = onoff_string.charAt(0);
-  single_twin = single_twin_string.charAt(0);
+  onoff = onoff_string[0];
+  single_twin = single_twin_string[0];
   target_power = target_power_string.toFloat();
   autopilot_mode = autopilot_mode_string.toInt();
   target_heading = target_heading_string.toFloat();
@@ -410,7 +466,7 @@ void split_by_commas(String inputString, int commaIndex[], int max_places) {
  **********************************/
 
 
-float calculateBuffer() {
+char update_energy_interval() {
 
   // Get time interval of loop
   energy_interval = (micros() - energy_start_time)/1000;
@@ -419,23 +475,31 @@ float calculateBuffer() {
   energy_start_time = micros();
 
   // Format the float with leading zeros and 1 decimal place and store it in the buffer
-  char buffer[10];  // Adjust the buffer size as needed
-  dtostrf(energy_interval, 6, 1, buffer);  // Parameters: value, width, precision, buffer
-  for (int i = 0; i < strlen(buffer); i++) { // Add leading zeros
-    if (buffer[i] == ' ') {
-      buffer[i] = '0';
+  char formatted_energy_interval[10];  // Adjust the buffer size as needed
+  dtostrf(energy_interval, 6, 1, formatted_energy_interval);  // Parameters: value, width, precision, buffer
+  for (int i = 0; i < strlen(formatted_energy_interval); i++) { // Add leading zeros
+    if (formatted_energy_interval[i] == ' ') {
+      formatted_energy_interval[i] = '0';
     }
   }
 
+  return formatted_energy_interval;
+
 }
 
-void send_data(int left_pwm, int right_pwm, float buffer) {
 
-  // Calculate buffer
-  calculateBuffer();
+
+void send_data() {
+
+  // Calculate energy time interval and format properly
+  char formatted_energy_interval = update_energy_interval();
+
+  // Convert current power levels to pwms so that pwms are sent
+  float left_pwm  = PowerLevel_to_pwm(PowerLevel_left);
+  float right_pwm = PowerLevel_to_pwm(PowerLevel_right);
 
   // Join values in a single string
-  String outgoing_message = String(left_pwm) + "," + String(right_pwm) + "," + String(buffer);
+  String outgoing_message = String(left_pwm) + "," + String(right_pwm) + "," + String(formatted_energy_interval);
 
   // Send outgoing message
   kayakinator.print(outgoing_message);
