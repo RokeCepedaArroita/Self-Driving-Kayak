@@ -14,12 +14,19 @@ ServoTimer2 esc_left;
 #include <SoftwareSerial.h>
 SoftwareSerial kayakinator(8, 9);
 
+// Settings
+int number_incoming_messages = 3;
+int length_message1 = 18;
+int length_message2 = 19;
+int length_message3 = 6;
+
 // Incoming variables
 String message1;
 String message2;
+String message3;
 char onoff, single_twin;
 int autopilot_onoff, autopilot_mode;
-float target_power, heading, angular_speed, target_heading;
+float target_power, heading, angular_speed, target_heading, kalman_loop_time;
 
 // Timers and internal variables
 const int neutral_pwm = 1500;           // stores the neutral PWM value in microseconds
@@ -51,6 +58,7 @@ void setup() {
   Serial.begin(9600);
 
   // For testing purposes
+  Serial.println("");
   Serial.print("Sketch:   ");   Serial.println(__FILE__);
   Serial.print("Uploaded: ");   Serial.println(__DATE__);
   
@@ -77,7 +85,7 @@ void setup() {
 void loop() {
 
   // Receive and assign the data
-  receive_data(2); // set the argument to the number of messages being received
+  receive_data(number_incoming_messages); // set the argument to the number of messages being received
 
   // Process the data and command the motors
   process_message();
@@ -92,10 +100,10 @@ void loop() {
   // Serial.println("");
 
   // Print gyro, compass and message time interval values for noise characterization
-  //sensor_test();
+  sensor_test();
 
 
-  //print_data();
+  // print_data();
 
 }
 
@@ -243,12 +251,7 @@ void process_message() {
 
       }
 
-
-
-
-
     }
-
   }
 
 
@@ -256,7 +259,6 @@ void process_message() {
     gradual_shutdown();
 
   }
-
 
 }
 
@@ -304,6 +306,8 @@ String read_and_flush(char ending_character) {
 
     receivedString = kayakinator.readStringUntil(ending_character);
 
+    //Serial.println(receivedString);
+
     // Add small delay to allow the Bluetooth module to catch up
     // CAREFUL!!!!! Stable above 400 microseconds or more (may be able to go a little less, 
     // but not under ~100 as too many bad/incomplete messages will be generated
@@ -328,14 +332,22 @@ void synchronize_message() {
     // Peek to see if the message starts with a 1
     if (kayakinator.available() > 0) {
 
-      if (kayakinator.peek() == '1') {
+      if (kayakinator.peek() == '!') {
         ready_to_read = true;
       }
 
-      else if (kayakinator.peek() == '2') {
+      else if (kayakinator.peek() == '?') {
 
-        // REMOVE BELOW
-        Serial.println("NOT SYNCHRONIZED");
+        // Erase the message and wait again until #1 appears
+        read_and_flush('>');
+        read_and_flush('>');
+
+        // Repeat until ready_to_read = true
+        ready_to_read = false;
+      }
+
+
+      else if (kayakinator.peek() == '%') {
 
         // Erase the message and wait again until #1 appears
         read_and_flush('>');
@@ -344,18 +356,29 @@ void synchronize_message() {
         ready_to_read = false;
       }
 
+
+      else {
+        // Erase the message and wait again until #1 appears
+        read_and_flush('>');
+
+        // Repeat until ready_to_read = true
+        ready_to_read = false;
+
+      }
+
     }
   }
 }
 
 
 
-
 void receive_data(int n_messages) {
   // Receive multiple messages one at a time and set global message variables
 
+
   // Wait until the first message appears
   synchronize_message();
+  
 
   // Read both messages
   for (int i = 0; i < n_messages; i++) {
@@ -373,16 +396,21 @@ void receive_data(int n_messages) {
       message2 = receivedString;
     }
 
+    
+    else if (i == 2) { //  (receivedString.charAt(0) == '3') {
+      message3 = receivedString;
+    }
+
     // Resets the not available timer to 0, since we have just received a complete message
     killswitch_start = millis();
 
   }
 
   // Assign the data to variables
-  if (check_messages(message1, message2) == true) {
+  if (check_messages(message1, message2, message3) == true) {
     
     // Unpack messages
-    assign_variables(message1, message2);
+    assign_variables(message1, message2, message3);
       
     // Get time interval of loop
     message_interval = (micros() - message_start_time)/1000;
@@ -391,9 +419,7 @@ void receive_data(int n_messages) {
     message_start_time = micros();
 
     // REMOVE BELOW
-    Serial.println(message_interval);
-    // Serial.print(" ms between succesful strings --- ");
-    // Serial.println("Succesfully received strings!");
+    // Serial.println(message_interval);
     good_messages++;
 
     
@@ -408,6 +434,7 @@ void receive_data(int n_messages) {
     Serial.println("!!!!!!!!!!!!!!!!!!!!!! BAD MESSAGES BELOW:");
     Serial.println(message1);
     Serial.println(message2);
+    Serial.println(message3);
     Serial.println("");
   }
 
@@ -426,13 +453,20 @@ void receive_data(int n_messages) {
 
 
 
-boolean check_messages(String message1, String message2) {
+boolean check_messages(String message1, String message2, String message3) {
   // Check if the strings are in sync
   
   boolean success = false;
 
-  if (message1.length() == 18 && message2.length() == 19 && message1.charAt(1) == message2.charAt(1)) {
-    success = true;
+  // Change the expected lengths of each message as necessary
+if (message1.length() == length_message1 && 
+    message2.length() == length_message2 && 
+    message3.length() == length_message3 && 
+    message1.charAt(1) == message2.charAt(1) && 
+    message2.charAt(1) == message3.charAt(1)) {
+  
+  success = true;
+
   }
 
   return success;
@@ -459,32 +493,45 @@ void print_data() {
   Serial.print(angular_speed, 3);
   Serial.print(", target_heading=");
   Serial.println(target_heading);
+  Serial.print(", kalman_loop_time=");
+  Serial.println(kalman_loop_time);
 
 }
 
 
 void sensor_test() {
   // Print sensor data for testing
-  Serial.print(heading);
-  Serial.print(", ");
-  Serial.print(angular_speed, 3);
-  Serial.print(", ");
+  //Serial.print(heading);
+  //Serial.print(",");
+  //Serial.print(angular_speed, 3);
+  //Serial.print(",");
   Serial.print(message_interval, 2);
-  Serial.print(", ");
-  Serial.print(good_messages);
-  Serial.print(", ");
-  Serial.print(bad_messages);
-  Serial.println(" ");
+  Serial.print(",");
+  Serial.println(kalman_loop_time, 2);
+  //Serial.print(",");
+  // Serial.print(good_messages);
+  // Serial.print(",");
+  // Serial.print(bad_messages);
+  // Serial.println(" ");
 }
 
 
-void assign_variables(String message1, String message2) {
+void assign_variables(String message1, String message2, String message3) {
   // Read messages and assign variables
 
-  int commaIndex1[5];
-  split_by_commas(message1, commaIndex1, 5);
-  int commaIndex2[3];
-  split_by_commas(message2, commaIndex2, 3);
+  // Replace these numbers by the number of commas in the message
+  int number_of_commas_message1 = 5;
+  int number_of_commas_message2 = 3;
+  int number_of_commas_message3 = 1;
+
+  // Split each message by commas
+  int commaIndex1[number_of_commas_message1]; 
+  split_by_commas(message1, commaIndex1, number_of_commas_message1);
+  int commaIndex2[number_of_commas_message2];
+  split_by_commas(message2, commaIndex2, number_of_commas_message2);
+  int commaIndex3[number_of_commas_message3];
+  split_by_commas(message3, commaIndex3, number_of_commas_message3);
+
 
   // Assign message 1
 
@@ -510,6 +557,13 @@ void assign_variables(String message1, String message2) {
   autopilot_onoff = autopilot_onoff_string.toInt();
   angular_speed = angular_speed_string.toFloat();
   heading = heading_string.toFloat();
+
+
+  // Assign message 3
+
+  String kalman_loop_time_string = message3.substring(commaIndex3[0] + 1, message3.length());
+  kalman_loop_time = kalman_loop_time_string.toFloat();
+
 
 }
 
