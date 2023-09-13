@@ -42,6 +42,7 @@ float PowerLevel_left;
 
 
 // Outgoing variables
+String outgoing_message;                // String to store outgoing message
 float energy_interval;                  // ENERGY TIMER: keeps track of cycles between motor changes to keep track of energy usage in the app
 float energy_start_time;                // ENERGY TIMER: start time of the energy interval timer
 
@@ -55,6 +56,7 @@ int good_messages = 0;
 void setup() {
 
   // Serial setup. Initializes the serial to communicate at a specific baud rate (115200 recommended, 9600 is too slow - interferes with program)
+  //Serial.begin(115200);
   Serial.begin(115200);
 
   // For testing purposes
@@ -63,7 +65,7 @@ void setup() {
   Serial.print("Uploaded: ");   Serial.println(__DATE__);
   
   // Bluetooth HM-10 setup. Initializes the port to communicate at a specific baud rate (9600)
-  kayakinator.begin(9600);
+  kayakinator.begin(38400);
 
   // Servo ESC setup: replace the numbers by the Arduino pin number (~) that is being used to connect to the right or left motor's ESC signal port
   esc_right.attach(5); 
@@ -84,33 +86,43 @@ void setup() {
 
 void loop() {
 
+
+
   // Receive and assign the data
   receive_data(number_incoming_messages); // set the argument to the number of messages being received
 
-  Serial.println(message1);
+  //Serial.print(message1);
   //Serial.print(message2);
   //Serial.println(message3);
 
   // Process the data and command the motors
+  // TODO: ONLY ACT IF THE DATA IS GOOD?
   process_message();
 
   //Serial.println(target_power);
 
 
-  
-  
-  //print_data();
+
+  float start_time_send = micros();
+
   // Send out diagnostic data to the app
-  //send_data();
+  send_data();
 
+  float send_interval = (micros() - start_time_send)/1000;
+  //Serial.print("Sending takes ");
+  //Serial.println(send_interval);
+  
 
+  //Serial.println(outgoing_message);
+  //Serial.println("");
 
-  // Serial.println(message1);
-  // Serial.println(message2);
-  // Serial.println("");
 
   // Print gyro, compass and message time interval values for noise characterization
-  //sensor_test();
+  sensor_test();
+
+  //delay(20);
+
+  //delay(10);
 
 
   //print_data();
@@ -226,7 +238,7 @@ void gradual_shutdown(int delay_ms=50, float step_change=5) {
 
 
 
-void gradual_shutdown_onestep(float step_change=10) {
+void gradual_shutdown_onestep(float step_change=25) {
 
   // Check if either power level is greater than zero
   if (PowerLevel_left > 0 || PowerLevel_right > 0) {
@@ -410,6 +422,7 @@ void receive_data(int n_messages) {
   // Wait until the first message appears
   synchronize_message();
   
+  float start_time_receive = micros();
 
   // Read both messages
   for (int i = 0; i < n_messages; i++) {
@@ -453,6 +466,9 @@ void receive_data(int n_messages) {
     // Serial.println(message_interval);
     good_messages++;
 
+  float receive_interval = (micros() - start_time_receive)/1000;
+  //Serial.print("Sending takes ");
+  //Serial.println(receive_interval);
     
 
   }
@@ -460,6 +476,7 @@ void receive_data(int n_messages) {
   else {
     // REMOVE BELOW
     bad_messages++;
+    Serial.println("BAD");
     // Serial.println("");
     // Serial.println("!! BAD MESSAGES BELOW:");
     // Serial.println(message1);
@@ -535,21 +552,21 @@ void sensor_test() {
   //Serial.print(",");
   //Serial.print(angular_speed, 3);
   //Serial.print(",");
-  Serial.print(PowerLevel_left);
-  Serial.print(" ");
-  Serial.print(PowerLevel_right);
-  Serial.print(" ");
-  Serial.print(target_power);
-  //Serial.print(message_interval, 1);
+  //Serial.print(PowerLevel_left);
   //Serial.print(" ");
-  //Serial.println(kalman_loop_time, 2);
-  //Serial.print(",");
+  //Serial.print(PowerLevel_right);
+  //Serial.print(" ");
+  //Serial.print(target_power);
+  //Serial.print(" ");
+  Serial.print(message_interval, 1);
+  Serial.print(" ");
+  Serial.print(kalman_loop_time, 2);
   //Serial.print(good_messages);
   //Serial.print(",");
   //Serial.print(bad_messages);
   //Serial.print(",");
   //Serial.print(target_power);
-  Serial.println(" ");
+  Serial.println("");
 }
 
 
@@ -646,13 +663,17 @@ void update_energy_interval(char* formatted_energy_interval, int buffer_size) {
 
 
 
-void wait_until_clear_to_send(){
-  // Wait until the Bluetooth module (kayakinator) is sending data
+void format_powerlevel(float powerlevel, char* formatted_power_level, int buffer_size) {
 
+  // Format the float with leading zeros and 1 decimal place and store it in the buffer
+  dtostrf(powerlevel, 5, 1, formatted_power_level); // Parameters: value, width, precision, buffer
+  for (int i = 0; i < strlen(formatted_power_level); i++) { // Add leading zeros
+    if (formatted_power_level[i] == ' ') {
+      formatted_power_level[i] = '0';
+    }
+  }
 
 }
-
-
 
 
 void send_data() {
@@ -661,8 +682,14 @@ void send_data() {
   char formatted_energy_interval[10]; // Adjust the buffer size as needed
   update_energy_interval(formatted_energy_interval, sizeof(formatted_energy_interval));
 
+  // Format the power levels with 3 digits and one decimal, with left zeroes if necessary
+  char formatted_power_level_left[10]; // Adjust the buffer size as needed
+  format_powerlevel(PowerLevel_left, formatted_power_level_left, sizeof(formatted_energy_interval));
+  char formatted_power_level_right[10]; // Adjust the buffer size as needed
+  format_powerlevel(PowerLevel_right, formatted_power_level_right, sizeof(formatted_energy_interval));
+
   // Join values in a single string
-  String outgoing_message = String(PowerLevel_left) + "," + String(PowerLevel_right) + "," + String(formatted_energy_interval);
+  outgoing_message = String(formatted_power_level_left) + "," + String(formatted_power_level_right) + "," + String(formatted_energy_interval);
 
   // Serial.println(outgoing_message);
 
