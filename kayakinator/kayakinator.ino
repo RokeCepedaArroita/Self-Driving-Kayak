@@ -54,8 +54,8 @@ int good_messages = 0;
 
 void setup() {
 
-  // Serial setup. Initializes the serial to communicate at a specific baud rate (9600)
-  Serial.begin(9600);
+  // Serial setup. Initializes the serial to communicate at a specific baud rate (115200 recommended, 9600 is too slow - interferes with program)
+  Serial.begin(115200);
 
   // For testing purposes
   Serial.println("");
@@ -87,12 +87,22 @@ void loop() {
   // Receive and assign the data
   receive_data(number_incoming_messages); // set the argument to the number of messages being received
 
+  Serial.println(message1);
+  //Serial.print(message2);
+  //Serial.println(message3);
+
   // Process the data and command the motors
   process_message();
 
+  //Serial.println(target_power);
 
+
+  
+  
+  //print_data();
   // Send out diagnostic data to the app
-  // send_data();
+  //send_data();
+
 
 
   // Serial.println(message1);
@@ -100,10 +110,10 @@ void loop() {
   // Serial.println("");
 
   // Print gyro, compass and message time interval values for noise characterization
-  sensor_test();
+  //sensor_test();
 
 
-  // print_data();
+  //print_data();
 
 }
 
@@ -216,6 +226,23 @@ void gradual_shutdown(int delay_ms=50, float step_change=5) {
 
 
 
+void gradual_shutdown_onestep(float step_change=10) {
+
+  // Check if either power level is greater than zero
+  if (PowerLevel_left > 0 || PowerLevel_right > 0) {
+
+    // Lower current power level
+    PowerLevel_left  = constrain(PowerLevel_left  - step_change, 0, 100);
+    PowerLevel_right = constrain(PowerLevel_right - step_change, 0, 100);
+    
+    // Set new power
+    set_power(PowerLevel_left, PowerLevel_right);
+
+  }
+
+}
+
+
 
 
 /***********************************
@@ -225,15 +252,17 @@ void gradual_shutdown(int delay_ms=50, float step_change=5) {
 
 void process_message() {
 
-  if (onoff == "N") {
+
+
+  if (onoff == 'N') {
 
     // Single engine mode: only give power to the left engine on pin 6
-    if (single_twin == "S") {
+    if (single_twin == 'S') {
       set_power(target_power, 0);
     }
 
     // Twin engine mode: give power to both engines, either with or without autopilot
-    else if (single_twin == "T") {
+    else if (single_twin == 'T') {
 
 
       if (autopilot_onoff == 0) { 
@@ -245,9 +274,11 @@ void process_message() {
       // AUTOPILOT ENGAGED
       else if (autopilot_onoff == 1) { 
 
-          //kalman_filter(heading, angular_speed, message_interval);
-          //autopilot();
-          //set_power(X,Y)
+        set_power(target_power, target_power);
+
+        //kalman_filter(heading, angular_speed, message_interval);
+        //autopilot();
+        //set_power(X,Y)
 
       }
 
@@ -255,8 +286,8 @@ void process_message() {
   }
 
 
-  else if (onoff == "F") { // if off, shut down engines
-    gradual_shutdown();
+  else if (onoff == 'F') { // if off, shut down engines
+    gradual_shutdown_onestep();
 
   }
 
@@ -429,13 +460,12 @@ void receive_data(int n_messages) {
   else {
     // REMOVE BELOW
     bad_messages++;
-    //Serial.println("Bad message");
-    Serial.println("");
-    Serial.println("!!!!!!!!!!!!!!!!!!!!!! BAD MESSAGES BELOW:");
-    Serial.println(message1);
-    Serial.println(message2);
-    Serial.println(message3);
-    Serial.println("");
+    // Serial.println("");
+    // Serial.println("!! BAD MESSAGES BELOW:");
+    // Serial.println(message1);
+    // Serial.println(message2);
+    // Serial.println(message3);
+    // Serial.println("");
   }
 
 
@@ -505,14 +535,21 @@ void sensor_test() {
   //Serial.print(",");
   //Serial.print(angular_speed, 3);
   //Serial.print(",");
-  Serial.print(message_interval, 2);
-  Serial.print(",");
-  Serial.println(kalman_loop_time, 2);
+  Serial.print(PowerLevel_left);
+  Serial.print(" ");
+  Serial.print(PowerLevel_right);
+  Serial.print(" ");
+  Serial.print(target_power);
+  //Serial.print(message_interval, 1);
+  //Serial.print(" ");
+  //Serial.println(kalman_loop_time, 2);
   //Serial.print(",");
-  // Serial.print(good_messages);
-  // Serial.print(",");
-  // Serial.print(bad_messages);
-  // Serial.println(" ");
+  //Serial.print(good_messages);
+  //Serial.print(",");
+  //Serial.print(bad_messages);
+  //Serial.print(",");
+  //Serial.print(target_power);
+  Serial.println(" ");
 }
 
 
@@ -589,42 +626,46 @@ void split_by_commas(String inputString, int commaIndex[], int max_places) {
  **********************************/
 
 
-char update_energy_interval() {
+void update_energy_interval(char* formatted_energy_interval, int buffer_size) {
 
   // Get time interval of loop
-  energy_interval = (micros() - energy_start_time)/1000;
+  energy_interval = (micros() - energy_start_time) / 1000;
 
   // Restart timing loop
   energy_start_time = micros();
 
   // Format the float with leading zeros and 1 decimal place and store it in the buffer
-  char formatted_energy_interval[10];  // Adjust the buffer size as needed
-  dtostrf(energy_interval, 6, 1, formatted_energy_interval);  // Parameters: value, width, precision, buffer
+  dtostrf(energy_interval, 6, 1, formatted_energy_interval); // Parameters: value, width, precision, buffer
   for (int i = 0; i < strlen(formatted_energy_interval); i++) { // Add leading zeros
     if (formatted_energy_interval[i] == ' ') {
       formatted_energy_interval[i] = '0';
     }
   }
 
-  return formatted_energy_interval;
+}
+
+
+
+void wait_until_clear_to_send(){
+  // Wait until the Bluetooth module (kayakinator) is sending data
+
 
 }
 
 
 
+
 void send_data() {
-
+  
   // Calculate energy time interval and format properly
-  char formatted_energy_interval = update_energy_interval();
-
-  // Convert current power levels to pwms so that pwms are sent
-  float left_pwm  = PowerLevel_to_pwm(PowerLevel_left);
-  float right_pwm = PowerLevel_to_pwm(PowerLevel_right);
+  char formatted_energy_interval[10]; // Adjust the buffer size as needed
+  update_energy_interval(formatted_energy_interval, sizeof(formatted_energy_interval));
 
   // Join values in a single string
-  String outgoing_message = String(left_pwm) + "," + String(right_pwm) + "," + String(formatted_energy_interval);
+  String outgoing_message = String(PowerLevel_left) + "," + String(PowerLevel_right) + "," + String(formatted_energy_interval);
+
+  // Serial.println(outgoing_message);
 
   // Send outgoing message
   kayakinator.print(outgoing_message);
-
 }
