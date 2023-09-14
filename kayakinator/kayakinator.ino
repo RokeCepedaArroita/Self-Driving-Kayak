@@ -5,7 +5,7 @@
 // Call the ServoTimer2 library and create Servo objects called "esc_right" and "esc_left".
 // Didn't use Servo.h library because it generated an interference with the PWM signal to the motor when the Bluetooth module was connected, making the motor jitter randomly.
 #include <ServoTimer2.h>
-ServoTimer2 esc_right; 
+ServoTimer2 esc_right;
 ServoTimer2 esc_left;
 
 // Call the SoftwareSerial library and create an additional serial port called "kayakinator" refering to our HM-10 BLE device.
@@ -40,17 +40,16 @@ float message_start_time;               // MESSAGE TIMER: start time of the mess
 float PowerLevel_right;
 float PowerLevel_left;
 
-
 // Outgoing variables
 String outgoing_message;                // String to store outgoing message
 float energy_interval;                  // ENERGY TIMER: keeps track of cycles between motor changes to keep track of energy usage in the app
 float energy_start_time;                // ENERGY TIMER: start time of the energy interval timer
 
-
 // TODO: Remove these below
 // Internals to test while programming
 int bad_messages = 0;
 int good_messages = 0;
+bool message_is_ok = false;
 
 
 void setup() {
@@ -63,14 +62,14 @@ void setup() {
   Serial.println("");
   Serial.print("Sketch:   ");   Serial.println(__FILE__);
   Serial.print("Uploaded: ");   Serial.println(__DATE__);
-  
+
   // Bluetooth HM-10 setup. Initializes the port to communicate at a specific baud rate (9600)
   kayakinator.begin(38400);
 
   // Servo ESC setup: replace the numbers by the Arduino pin number (~) that is being used to connect to the right or left motor's ESC signal port
-  esc_right.attach(5); 
+  esc_right.attach(5);
   esc_left.attach(6);
-  
+
   // Arm both motors
   arm_motors();
 
@@ -111,7 +110,34 @@ void loop() {
   float send_interval = (micros() - start_time_send)/1000;
   //Serial.print("Sending takes ");
   //Serial.println(send_interval);
-  
+
+  if (message_is_ok) {
+
+    if (kalman_loop_time < 20) {
+      Serial.println();
+      Serial.print("RECEIVED A ");
+      Serial.print(kalman_loop_time);
+      Serial.println(" ms KALMAN LOOP TIME, MESSAGES BELOW");
+      Serial.print(message1);
+      Serial.print(message2);
+      Serial.print(message3);
+      Serial.println();
+    }
+
+  else if (!message_is_ok){
+
+      Serial.print(message1);
+      Serial.print(message2);
+      Serial.print(message3);
+      Serial.println();
+
+
+  }
+
+  }
+
+
+
 
   //Serial.println(outgoing_message);
   //Serial.println("");
@@ -173,7 +199,7 @@ void arm_motors() {
 
   // Arm motors by sending neutral PWM
   esc_left.write(neutral_pwm);
-  esc_right.write(neutral_pwm); 
+  esc_right.write(neutral_pwm);
 
   // Record the value sent
   PowerLevel_left  = 0;
@@ -194,7 +220,7 @@ void set_power(float newPowerLevel_left, float newPowerLevel_right) {
   float pwm_right = PowerLevel_to_pwm(newPowerLevel_right);
 
   // Send command to motors
-  esc_left.write(pwm_left); 
+  esc_left.write(pwm_left);
   esc_right.write(pwm_right);
 
   // Record the value sent
@@ -225,10 +251,10 @@ void gradual_shutdown(int delay_ms=50, float step_change=5) {
     // Lower current power level
     PowerLevel_left  = constrain(PowerLevel_left  - step_change, 0, 100);
     PowerLevel_right = constrain(PowerLevel_right - step_change, 0, 100);
-    
+
     // Set new power
     set_power(PowerLevel_left, PowerLevel_right);
-    
+
     // Add a small delay for a gradual shutdown
     delay(delay_ms);
 
@@ -246,7 +272,7 @@ void gradual_shutdown_onestep(float step_change=25) {
     // Lower current power level
     PowerLevel_left  = constrain(PowerLevel_left  - step_change, 0, 100);
     PowerLevel_right = constrain(PowerLevel_right - step_change, 0, 100);
-    
+
     // Set new power
     set_power(PowerLevel_left, PowerLevel_right);
 
@@ -277,14 +303,14 @@ void process_message() {
     else if (single_twin == 'T') {
 
 
-      if (autopilot_onoff == 0) { 
+      if (autopilot_onoff == 0) {
         // Give equal power to both engines
         set_power(target_power, target_power);
 
       }
 
       // AUTOPILOT ENGAGED
-      else if (autopilot_onoff == 1) { 
+      else if (autopilot_onoff == 1) {
 
         set_power(target_power, target_power);
 
@@ -352,7 +378,7 @@ String read_and_flush(char ending_character) {
     //Serial.println(receivedString);
 
     // Add small delay to allow the Bluetooth module to catch up
-    // CAREFUL!!!!! Stable above 400 microseconds or more (may be able to go a little less, 
+    // CAREFUL!!!!! Stable above 400 microseconds or more (may be able to go a little less,
     // but not under ~100 as too many bad/incomplete messages will be generated
     delayMicroseconds(400);
 
@@ -368,7 +394,7 @@ void synchronize_message() {
   boolean ready_to_read = false; // incoming data availability flag
 
   while (ready_to_read != true) { // while the first message is not seen
-    
+
     // Wait until a message arrives
     wait_for_bluetooth_message();
 
@@ -421,7 +447,7 @@ void receive_data(int n_messages) {
 
   // Wait until the first message appears
   synchronize_message();
-  
+
   float start_time_receive = micros();
 
   // Read both messages
@@ -429,18 +455,18 @@ void receive_data(int n_messages) {
 
     // Receive message one by one
     String receivedString = read_and_flush('>');
-  
+
     // Allocate messages and make sure they are in sync (e.g. each first message has its corresponding second message)
     if (i == 0) { // (receivedString.charAt(0) == '1') {
       message1 = receivedString;
-    } 
-    
+    }
+
 
     else if (i == 1) { //  (receivedString.charAt(0) == '2') {
       message2 = receivedString;
     }
 
-    
+
     else if (i == 2) { //  (receivedString.charAt(0) == '3') {
       message3 = receivedString;
     }
@@ -452,10 +478,10 @@ void receive_data(int n_messages) {
 
   // Assign the data to variables
   if (check_messages(message1, message2, message3) == true) {
-    
+
     // Unpack messages
     assign_variables(message1, message2, message3);
-      
+
     // Get time interval of loop
     message_interval = (micros() - message_start_time)/1000;
 
@@ -465,58 +491,74 @@ void receive_data(int n_messages) {
     // REMOVE BELOW
     // Serial.println(message_interval);
     good_messages++;
+    message_is_ok = true;
 
   float receive_interval = (micros() - start_time_receive)/1000;
   //Serial.print("Sending takes ");
   //Serial.println(receive_interval);
-    
+
 
   }
 
   else {
     // REMOVE BELOW
     bad_messages++;
+    message_is_ok = false;
     Serial.println("BAD");
     // Serial.println("");
-    // Serial.println("!! BAD MESSAGES BELOW:");
-    // Serial.println(message1);
-    // Serial.println(message2);
-    // Serial.println(message3);
-    // Serial.println("");
+    // Serial.println("a!! BAD MESSAGES BELOW:");
+    Serial.println(message1);
+    Serial.println(message2);
+    Serial.println(message3);
+    Serial.println("");
   }
 
 
 }
 
-    
 
 
 
 
-    
-
-
+bool isAsciiString(const String &str) {
+  for (int i = 0; i < str.length(); i++) {
+    if (!isAscii(str.charAt(i))) {
+      // If any character is not ASCII, return false
+      return false;
+    }
+  }
+  // All characters are ASCII
+  return true;
+}
 
 
 
 
 boolean check_messages(String message1, String message2, String message3) {
   // Check if the strings are in sync
-  
+
   boolean success = false;
 
   // Change the expected lengths of each message as necessary
-if (message1.length() == length_message1 && 
-    message2.length() == length_message2 && 
-    message3.length() == length_message3 && 
-    message1.charAt(1) == message2.charAt(1) && 
-    message2.charAt(1) == message3.charAt(1)) {
-  
-  success = true;
+  if (message1.length() == length_message1 &&      // Check message lengths
+      message2.length() == length_message2 &&
+      message3.length() == length_message3 &&
+      message1.charAt(1) == message2.charAt(1) &&  // Check synchronicity between messages
+      message2.charAt(1) == message3.charAt(1) &&
+      isAsciiString(message1) &&  // Check for bad characters
+      isAsciiString(message2) &&
+      isAsciiString(message3)                      )  {
+
+    // Additional loop time message check since the last item tends to get distorted
+    String kalman_time_temporary = message3.substring(3, message3.length());
+    if (kalman_time_temporary.toFloat() > 40) {
+      success = true;
+    }
 
   }
 
   return success;
+
 }
 
 
@@ -579,7 +621,7 @@ void assign_variables(String message1, String message2, String message3) {
   int number_of_commas_message3 = 1;
 
   // Split each message by commas
-  int commaIndex1[number_of_commas_message1]; 
+  int commaIndex1[number_of_commas_message1];
   split_by_commas(message1, commaIndex1, number_of_commas_message1);
   int commaIndex2[number_of_commas_message2];
   split_by_commas(message2, commaIndex2, number_of_commas_message2);
@@ -677,7 +719,7 @@ void format_powerlevel(float powerlevel, char* formatted_power_level, int buffer
 
 
 void send_data() {
-  
+
   // Calculate energy time interval and format properly
   char formatted_energy_interval[10]; // Adjust the buffer size as needed
   update_energy_interval(formatted_energy_interval, sizeof(formatted_energy_interval));
@@ -689,7 +731,7 @@ void send_data() {
   format_powerlevel(PowerLevel_right, formatted_power_level_right, sizeof(formatted_energy_interval));
 
   // Join values in a single string
-  outgoing_message = String(formatted_power_level_left) + "," + String(formatted_power_level_right) + "," + String(formatted_energy_interval);
+  outgoing_message = "*#" + String(formatted_power_level_left) + "," + String(formatted_power_level_right) + "," + String(formatted_energy_interval);
 
   // Serial.println(outgoing_message);
 
