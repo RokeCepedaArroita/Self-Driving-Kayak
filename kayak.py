@@ -26,7 +26,8 @@ class Kayak:
         self.overall_efficiency = 0.206            # overall propulsion efficiency in converting power to forward push force (includes electrical, motor friction and propeller losses)
         self.twin_engine_drag_penalty = 1.113      # drag penalty incurred by placing a second engine
         self.CdA = 0.101*self.overall_efficiency*self.twin_engine_drag_penalty  # m^2, effective drag_coefficient*effective_cross_sectional_area, standard deviation is 18%
-        self.turning_drag = 0.026 # Nm/(deg/s)^2, opposing torque proportional to angular_speed^2 caused primarily by back skegs hitting the water at an angle, experimentally calibrated (does not take speed into account)
+        self.turning_drag = 0.009 # empirically measured, Nm/(deg/s*km^2/h^2), opposing torque proportional to angular_speed*speed^2 caused primarily by back skegs hitting the water at an angle, experimentally calibrated
+        self.zero_velocity_turning_drag = 0.007 # theoretically estimated, rotational opposing torque amplitude caused by the skegs when the kayak is not moving
 
         # Kinematics
         self.position = [0,0]                             # position in m
@@ -63,18 +64,18 @@ class Kayak:
 
 
     def turning_drag_torque(self, net_torque):
-        ''' Simple model that simulates the opposition to turning produced by the skegs.
-            net_torque is the combined torque of the motors and wind in Nm, the angular
-            velocity is in deg/s and turning_drag is also returned in Nm. More generally,
-            the drag could be modelled as (D + C v + E alpha) omega**2 where v is the
-            linear speed and alpha is the fixed angle of attack, and E-D-C are constants
-            The omega**2 relationship comes from sin^2(x) ≈ x^2 at low x,
-            where x is the angle of attack '''
+        ''' Simple model that simulates the rotational opposition to turning produced by the skegs.
+            This rotational drag comes from the skegs acting like rudders at speed, and by the
+            skegs impacting the water side-on, when turning at zero speed. Both terms are combined
+            in a general formula rotational_drag_torque = A*omega*v^2 + B*omega^2. The constants are
+            empirically calibrated so that the angular_velocity is in units deg/s and the speed is in
+            km/h. The torque is the returned in Nm. The turning torque at speed assumes small
+            deflection angles relative to the linear velocity vector, which is very close in most cases '''
 
         # Turning drag always has a sign opposite to angular velocity
-        turning_drag = -self.turning_drag*np.sign(self.angular_velocity)*(self.angular_velocity)**2
+        turning_drag_torque = -self.turning_drag*self.angular_velocity*self.speed**2 - self.zero_velocity_turning_drag*np.sign(self.angular_velocity)*(self.angular_velocity)**2
 
-        return turning_drag
+        return turning_drag_torque
 
 
     def update(self, left_engine_power, right_engine_power, dt):

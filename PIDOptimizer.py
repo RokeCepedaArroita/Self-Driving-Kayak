@@ -5,26 +5,80 @@ from weather import Weather
 from autopilot import Autopilot
 from simulator import Simulator
 
-# Initialize weather: wind limit 28 km/h
-weather = Weather(wind_speed=17, wind_heading=180)
+
+# Timestep
+timestep = 0.122 # s
+
+# Initialize weather: wind limit 21 km/h
+weather = Weather(wind_speed=0, wind_heading=180+90)
 
 # Initialize kayak
 kayak = Kayak(initial_speed=4, initial_heading=45, weather=weather)
 
-# Initialize autopilot (Pessen: kp=49, kd=68, ki=13, Classic: kp=42, kd=49, ki=9, No overshoot: kp=14, kd=43, ki=3, Some Overshoot: kp=23, kd=72, ki=5)
-autopilot = Autopilot(kp=49, kd=68, ki=13, smoothing_time=0.1, derivative_smoothing_time=0.4, target_power=50, target_heading=135)
+# Define noise parameters for the Kalman filter and sensor data generation
+sensor_noise_water = {'compass_heading':  1.1,  # deg, sensor sensitivity 1 standard deviation
+                      'angular_speed'  : 0.45,  # deg/s, sensor sensitivity 1 standard deviation
+                      'covariance'     :    0}  # cov(compass, angular_speed) in deg^2/s
+
+# sensor_noise_small = {'compass_heading':  2.5,  # deg, sensor sensitivity 1 standard deviation
+#                       'angular_speed'  : 0.84,  # deg/s, sensor sensitivity 1 standard deviation
+#                       'covariance'     : -0.3}  # cov(compass, angular_speed) in deg^2/s
+#
+# sensor_noise_large = {'compass_heading':  5.0,  # deg, sensor sensitivity 1 standard deviation
+#                       'angular_speed'  :  4.2,  # deg/s, sensor sensitivity 1 standard deviation
+#                       'covariance'     :  -8.7}  # cov(compass, angular_speed) in deg^2/s
+
+sensor_noise = sensor_noise_water
+
+
+from ziegler_nichols import ziegler_nichols
+
+ziegler_nichols(ku=20, Tu=7.36)
+
+
+
+# Calm conditions below
+autopilot = Autopilot(kp=4.00, kd=10, ki=1.1, timestep=timestep, deadband=None,
+                     smoothing_time=0.1, derivative_smoothing_time=0.5, sensor_noise=sensor_noise,
+                     target_power=50, target_heading=135, alpha_fading_memory=1.1, integral_activation_angle=20)
+
+# Initialize simulator
+simulator = Simulator(simulated_time=100, timestep=timestep, phase_delay=True,
+                      kayak=kayak, weather=weather, autopilot=autopilot,
+                      sensor_noise=sensor_noise, plot=True)
+
+data = simulator.simulate_kayak()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#######################################################################################
+
+
 
 # Create wind disturbance
 disturbance = {'time':         50,  # s, time at which disturbance is applied
                'wind_speed':   17,  # km/h
                'wind_heading': 90} # deg
-
-# Initialize simulator
-simulator = Simulator(simulated_time=100, kayak=kayak, weather=weather, autopilot=autopilot, disturbance=disturbance, plot=True)
-
-data = simulator.simulate_kayak()
-
-
+disturbance = None
 
 
 

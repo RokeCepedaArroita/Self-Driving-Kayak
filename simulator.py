@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 
 
 class Simulator:
-    def __init__(self, timestep=0.08, simulated_time=60, kayak=None, weather=None, autopilot=None, disturbance=None, plot=False):
+    def __init__(self, timestep=0.122, simulated_time=60, kayak=None, weather=None, autopilot=None,
+                 disturbance=None, sensor_noise=None, phase_delay=True, plot=False):
 
         # Simulation parameters
         self.timestep = timestep              # s, time interval at which physics and autopilot are simulated.
@@ -16,6 +17,7 @@ class Simulator:
         self.autopilot   = autopilot          # autopilot object
         self.plot        = plot               # wether to plot the simulation or not (True/False)
         self.disturbance = disturbance        # dictionary that redefines wind parameters at a specified time in s (e.g. {'time': 10, 'wind_speed': 20, 'wind_heading': 180})
+        self.phase_delay = phase_delay     # true/false: apply delay of one timestep between the time that the data is collected and the moment the autopilot receives and acts on that data
 
         # Simulation data
         self.data = {'time':                           [],
@@ -37,9 +39,12 @@ class Simulator:
 
 
         # Realistic sensor noise used to simulate sensor readings and determine the PID deadband
-        self.sensor_noise = {'compass_heading': 1.04,   # deg, 1 standard deviation
-                             'angular_speed'  : 0.017}  # deg/s, 1 standard deviation
-
+        if sensor_noise is None:
+            self.sensor_noise = {'compass_heading': 1.04,   # deg, sensor sensitivity 1 standard deviation
+                                 'angular_speed'  : 0.017,  # deg/s, sensor sensitivity 1 standard deviation
+                                 'covariance'     : 0    }  # cov(compass, angular_speed) in deg^2/s
+        else:
+            self.sensor_noise = sensor_noise
 
 
     # Function to append simulation data
@@ -50,15 +55,45 @@ class Simulator:
             raise ValueError(f"Invalid data type: {data_type}")
 
 
+    # Create covariance matrix
+    def create_covariance_matrix(self, sensor_noise):
+        covariance_matrix = [ [ sensor_noise['compass_heading']**2, sensor_noise['covariance']      ],
+                              [ sensor_noise['covariance']        , sensor_noise['angular_speed']**2] ]
+        return covariance_matrix
+
+
     # Simulate sensors
-    def simulate_sensors(self, heading, angular_speed):
+    def simulate_sensors(self, heading, angular_speed, sensor_noise):
         ''' Simulate sensor noise '''
-        heading = np.random.normal(loc=heading, scale=self.sensor_noise['compass_heading'])
-        angular_speed = np.random.normal(loc=angular_speed, scale=self.sensor_noise['angular_speed'])
-        # Constrain heading between 0 and 360
-        #heading %= 360
+
+        # Build covariance matrix
+        sensor_covariance = self.create_covariance_matrix(sensor_noise)
+
+        # Build mean
+        sensor_mean = [heading, angular_speed]
+
+        def generate_correlated_data(mean, covariance, n_samples=1):
+            ''' Generate correlated x,y data '''
+            x, y = np.random.multivariate_normal(mean, covariance, n_samples).T
+            if n_samples == 1:
+                x = x[0]
+                y = y[0]
+            return x, y
+
+        # Generate simulated sensor readouts
+        heading, angular_speed = generate_correlated_data(sensor_mean, sensor_covariance)
+
         return heading, angular_speed
 
+    # # Simulate sensors
+    # def simulate_sensors(self, heading, angular_speed, sensor_noise):
+    #     ''' Simulate sensor noise '''
+    #
+    #     # Simple noise simulation
+    #     sensor_covariance = np.random.normal(heading, sensor_noise['compass_heading'])
+    #     angular_speed     = np.random.normal(angular_speed, sensor_noise['compass_heading'])
+    #
+    #     return heading, angular_speed
 
 
     # Simulation function
@@ -68,14 +103,24 @@ class Simulator:
         # Start time
         time = self.starting_time  # starting time in s
 
+        # Initialize previous data values, which will be stored to introduce a lag to the autopilot data
+        simulated_heading_previous       = None
+        simulated_angular_speed_previous = None
+
         # Simulate
         for step in np.arange(0, np.round(self.simulated_time / self.timestep)):
 
             # Simulate sensor noise
-            simulated_heading, simulated_angular_speed = self.simulate_sensors(self.kayak.angle, self.kayak.angular_velocity)
+            simulated_heading, simulated_angular_speed = self.simulate_sensors(self.kayak.angle, self.kayak.angular_velocity, self.sensor_noise)
 
             # Control
-            left_engine_power, right_engine_power = self.autopilot.PIDController(simulated_heading, simulated_angular_speed)
+            if self.phase_delay == False: # give current data (no phase delay) to the simulator
+                left_engine_power, right_engine_power = self.autopilot.PIDController(simulated_heading, simulated_angular_speed)
+            else:
+                if simulated_heading_previous is None and simulated_angular_speed_previous is None:
+                    left_engine_power, right_engine_power = 0, 0 # No control because we have no data
+                else: # give one-timestep-old data to the autopilot
+                    left_engine_power, right_engine_power = self.autopilot.PIDController(simulated_heading_previous, simulated_angular_speed_previous)
 
             # Effect
             angle, angular_velocity, position, speed, acceleration, apparent_wind_heading_absolute, position = \
@@ -90,25 +135,17 @@ class Simulator:
                     self.weather.wind_speed   = self.disturbance['wind_speed']
                     self.weather.wind_heading = self.disturbance['wind_heading']
 
-            # if time > 0:
-            #     self.autopilot.target_heading = 180
-            # if time > 5:
-            #     self.autopilot.target_heading = 270
-            # if time > 8:
-            #     self.autopilot.target_heading = 0
-            # if time > 40:
-            #     # self.weather.wind_speed = 0
-            #     self.autopilot.target_heading = 35
-            # if time > 60:
-            #     self.autopilot.target_heading = 76
-            # if time > 90:
-            #     self.autopilot.target_heading = None
-            #     self.autopilot.target_power = 0
-
             # Unpack positions
             position_x, position_y = position
 
             # Append the data
+            if simulated_heading_previous is None and simulated_angular_speed_previous is None:
+                autopilot_filtered_heading_value = np.nan
+                autopilot_filtered_angular_velocity_value = np.nan
+            else:
+                autopilot_filtered_heading_value = self.autopilot.filtered_heading
+                autopilot_filtered_angular_velocity_value = self.autopilot.filtered_angular_velocity
+
             data_to_add = [('time', time),
                 ('angle', angle),
                 ('angular_velocity', angular_velocity),
@@ -121,21 +158,28 @@ class Simulator:
                 ('apparent_wind_heading_absolute', apparent_wind_heading_absolute),
                 ('target_heading', self.autopilot.target_heading),
                 ('simulated_heading', simulated_heading),
-                ('filtered_heading', self.autopilot.filtered_heading),
+                ('filtered_heading', autopilot_filtered_heading_value),
                 ('simulated_angular_speed', simulated_angular_speed),
-                ('filtered_angular_speed', self.autopilot.filtered_angular_velocity),
+                ('filtered_angular_speed', autopilot_filtered_angular_velocity_value),
                 ('target_power', self.autopilot.target_power)]
             for data_type, value in data_to_add:
                 self.add_data(data_type, value)
 
-            if -269.5 > angle > -270.5:
-                print(f'At {time:.1f} s I am at {angle:.2f} deg, moving at {angular_velocity:.1f} deg/s')
-            if 89.5 < angle < 90.5 and time < 30:
-                print(f'At {time:.1f} s I am at {angle:.2f} deg, moving at {angular_velocity:.1f} deg/s')
+            # Copy previous sensor values
+            simulated_heading_previous = simulated_heading
+            simulated_angular_speed_previous = simulated_angular_speed
+
+            # if 451.5 > angle > 448.5:
+            #     print(f'At {time:.1f} s I am at {angle:.2f} deg, moving at {angular_velocity:.1f} deg/s')
+            # if 89.5 < angle < 90.5 and time < 30:
+            #     print(f'At {time:.1f} s I am at {angle:.2f} deg, moving at {angular_velocity:.1f} deg/s')
+
+
 
         # Plot simulation
         if self.plot:
             self.plot_simulation()
+
 
         return self.data
 
@@ -152,11 +196,13 @@ class Simulator:
         maximum_speed = self.weather.maximum_speed(self.autopilot.target_power, self.kayak.power_to_thrust, self.kayak.CdA)
         ax1.plot(self.data['time'], self.data['speed'], color='C0', linewidth=3, label='Speed (km/h)')
         ax1.plot(self.data['time'], np.multiply(self.data['acceleration'],3.6*6), color='C3', linewidth=3, label='Acceleration (6*(km/h)/s)')
+        ax1.plot(self.data['time'], np.multiply(self.data['simulated_angular_speed'],0.1), color='C3', label=r'Sensor $\omega$ (0.1*deg/s)', linewidth=2, alpha=0.2, zorder=1)
+        ax1.plot(self.data['time'], np.multiply(self.data['filtered_angular_speed'],0.1), color='C2', label=r'Filtered $\omega$ (0.1*deg/s)', linewidth=2, alpha=0.2, zorder=1)
         ax1.axhline(y=maximum_speed, color='C0', linestyle='-', linewidth=10, alpha=0.15, label='Max Target Speed')
         ax1.axhline(y=0, color='k', linestyle='-', linewidth=1, alpha=0.15)
         ax1.axvline(x=10, color='k', linestyle='--', linewidth=2, alpha=0.1)
         ax1.set_ylabel('Speed and Acceleration')
-        ax1.set_ylim([-1,7])
+        ax1.set_ylim([-2,7])
         ax1.set_xlim([0,np.max(self.data['time'])])
         ax1.set_title(fr'$Kp$={self.autopilot.kp}, $Kd$={self.autopilot.kd}, $Ki$={self.autopilot.ki}')
         ax1.legend()
