@@ -104,13 +104,7 @@ float total_time_ms = 0;
 void setup() {
 
   // Serial setup. Initializes the serial to communicate at a specific baud rate (115200 recommended, 9600 is too slow - interferes with program)
-  //Serial.begin(115200); TODO: REMOVE BELOW
-  Serial.begin(115200);
-
-  // For testing purposes
-  //Serial.println("");
-  //Serial.print("Sketch:   ");   Serial.println(__FILE__);
-  //Serial.print("Uploaded: ");   Serial.println(__DATE__);
+  // Serial.begin(115200); //TODO: REMOVE BELOW
 
   // Bluetooth HM-10 setup. Initializes the port to communicate at a specific baud rate (9600)
   kayakinator.begin(38400);
@@ -147,43 +141,8 @@ void loop() {
   // Process the data and command the motors
   process_message();
 
-  float process_timer_interval = (micros()-process_timer_start)/1000;
-
-  // Serial.print("Took ");
-  // Serial.println(process_timer_interval);
-  // Serial.println(" ms from receive to act");
-
   // Send out diagnostic data to the app
   send_data();
-
-  // Print gyro, compass and message time interval values for noise characterization
-  // sensor_test();
-
-  // TODO: REMOVE THIS
-  total_time_ms = total_time_ms + kalman_loop_time;
-
-  // Serial.print(total_time_ms);
-  // Serial.print(" ");
-  // Serial.print(filtered_heading-heading);
-  // Serial.print(" ");
-  // Serial.print((filtered_angular_velocity-angular_speed)*0.122);
-  // Serial.print(" ");
-  // Serial.print(epsilon(0,0));
-  // Serial.println("");
-
-  // Serial.print(total_time_ms);
-  // Serial.print(" ");
-  // Serial.print(filtered_angular_velocity,3);
-  // Serial.print(" ");
-  // Serial.print(angular_speed,3);
-  // Serial.println("");
-
-  // Serial.print(total_time_ms);
-  // Serial.print(" ");
-  // Serial.print(filtered_heading);
-  // Serial.print(" ");
-  // Serial.print(heading);
-  // Serial.println("");
 
 }
 
@@ -271,6 +230,23 @@ void PID_controller(float current_heading, float angular_velocity, float timeste
   left_engine_power = kp * error - kd * derivative + ki * integral;
   right_engine_power = -kp * error + kd * derivative - ki * integral;
 
+  // if (kp * error > 0) {
+  //   Serial.print("P pushing RIGHT, ");
+  // }
+  // else if (kp * error < 0) {
+  //   Serial.print("P pushing LEFT, ");
+  // }
+
+  // if (kd * derivative > 0) {
+  //   Serial.print("kd pushing LEFT");
+  // }
+  // else if (kd * derivative < 0) {
+  //   Serial.println("kd pushing RIGHT");
+  // }
+
+
+  // Serial.println("");
+
   // Normalize output
   left_engine_power = max(min(left_engine_power, max_power), 0.0);
   right_engine_power = max(min(right_engine_power, max_power), 0.0);
@@ -286,17 +262,8 @@ void PID_controller(float current_heading, float angular_velocity, float timeste
 
   // If there is an engine_offset and the motors are not saturated, apply it: more power to left (old), less power to righ (new)
   if (engine_offset != 0 && left_engine_power != max_power && right_engine_power != max_power) {
-    Serial.print("Applying offset!");
-    Serial.print(left_engine_power);
-    Serial.print(", ");
-    Serial.print(right_engine_power);
-    Serial.print(" ----> ");
     left_engine_power  = (1+(engine_offset)/100) * left_engine_power;
     right_engine_power = (1-(engine_offset)/100) * right_engine_power;
-    Serial.print(left_engine_power);
-    Serial.print(", ");
-    Serial.print(right_engine_power);
-    Serial.println("");
   }
 
   // Smooth output with a low pass filter
@@ -504,21 +471,6 @@ void set_autopilot_parameters(const float* parameters) {
   alpha_fading_memory = parameters[5];
   engine_offset = parameters[6];
 
-  // Serial.print(kp);
-  // Serial.print(", ");
-  // Serial.print(kd);
-  // Serial.print(", ");
-  // Serial.print(ki);
-  // Serial.print(", ");
-  // Serial.print(sigma_compass);
-  // Serial.print(", ");
-  // Serial.print(sigma_gyro);
-  // Serial.print(", ");
-  // Serial.print(alpha_fading_memory);
-  // Serial.print(", ");
-  // Serial.print(engine_offset);
-  // Serial.println("");
-
 }
 
 
@@ -582,12 +534,6 @@ void process_message() {
 
         // Update the Kalman filter and choose a power level
         PID_controller(heading, angular_speed, kalman_loop_time/1000);
-
-        //Serial.print(left_engine_power);
-        //Serial.print(", ");
-        //Serial.print(right_engine_power);
-        //Serial.print(", ");
-        //Serial.println(timestep);
 
         // Set the appropiate power
         set_power(left_engine_power, right_engine_power);
@@ -799,10 +745,6 @@ void receive_data(int n_messages) {
     // Serial.println(message_interval);
     good_messages++;
     message_is_ok = true;
-
-  float receive_interval = (micros() - start_time_receive)/1000;
-  //Serial.print("Sending takes ");
-  //Serial.println(receive_interval);
 
 
   }

@@ -124,6 +124,7 @@ class Autopilot:
         right_engine_power = max(min(right_engine_power, max_power), 0)
 
 
+
         # Adjust output to maintain some minimum value of forward thrust at all times
         if left_engine_power+right_engine_power < self.target_power:
             # Calculate the combined power deficit (e.g. 50 means that each engine should be running 25% higher)

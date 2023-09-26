@@ -32,15 +32,14 @@ sensor_noise = sensor_noise_water
 
 
 from ziegler_nichols import ziegler_nichols
-
-ziegler_nichols(ku=20, Tu=7.36)
+ziegler_nichols(ku=10, Tu=13.32)
 
 
 
 # Calm conditions below
-autopilot = Autopilot(kp=4.00, kd=10, ki=1.1, timestep=timestep, deadband=None,
-                     smoothing_time=0.1, derivative_smoothing_time=0.5, sensor_noise=sensor_noise,
-                     target_power=50, target_heading=135, alpha_fading_memory=1.1, integral_activation_angle=20)
+autopilot = Autopilot(kp=2.00, kd=7.1, ki=0.38, timestep=timestep, deadband=None,
+                      smoothing_time=0.1, derivative_smoothing_time=0.5, sensor_noise=sensor_noise,
+                      target_power=50, target_heading=135, alpha_fading_memory=1.1, integral_activation_angle=20)
 
 # Initialize simulator
 simulator = Simulator(simulated_time=100, timestep=timestep, phase_delay=True,
