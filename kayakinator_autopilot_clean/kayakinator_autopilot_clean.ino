@@ -49,7 +49,7 @@ float smoothing_time_default = 0.1; // s, typical output smoothing time
 float derivative_smoothing_time_default = 0.5; // s, typical derivative smoothing time
 float engine_offset = 0;
 
-float calm[]               = {4.0,  9.8,  1.1, 1.1, 0.45, 1.1, 0}; // P, D, I, sigma_compass, sigma_gyro, alpha_fading_memory, engine offset
+float calm[]               = {4.0,  27,  0.40, 1.1, 0.45, 1.1, 0}; // P, D, I, sigma_compass, sigma_gyro, alpha_fading_memory, engine offset I CHANGED THIS!! IT'S EVEN MORE THAN CALM NO OVERSHOOT
 float calm_nolag[]         = {4.0, 10.9, 0.98, 1.1, 0.45, 1.3, 0}; // P, D, I, sigma_compass, sigma_gyro, alpha_fading_memory, engine offset
 float calm_noovershoot[]   = {4.0, 16.7, 0.64, 1.1, 0.45, 1.1, 0}; // P, D, I, sigma_compass, sigma_gyro, alpha_fading_memory, engine offset
 float rough[]              = {2.0,  7.3, 0.36, 1.1, 0.45, 1.1, 0}; // P, D, I, sigma_compass, sigma_gyro, alpha_fading_memory, engine offset

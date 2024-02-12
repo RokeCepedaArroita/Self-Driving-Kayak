@@ -28,6 +28,10 @@ class Kayak:
         self.CdA = 0.101*self.overall_efficiency*self.twin_engine_drag_penalty  # m^2, effective drag_coefficient*effective_cross_sectional_area, standard deviation is 18%
         self.turning_drag = 0.009 # empirically measured, Nm/(deg/s*km^2/h^2), opposing torque proportional to angular_speed*speed^2 caused primarily by back skegs hitting the water at an angle, experimentally calibrated
         self.zero_velocity_turning_drag = 0.007 # theoretically estimated, rotational opposing torque amplitude caused by the skegs when the kayak is not moving
+        self.turning_drag = 0.009*0.05 # empirically measured, Nm/(deg/s*km^2/h^2), opposing torque proportional to angular_speed*speed^2 caused primarily by back skegs hitting the water at an angle, experimentally calibrated
+        self.zero_velocity_turning_drag = 0.007*0.05 # theoretically estimated, rotational opposing torque amplitude caused by the skegs when the kayak is not moving
+
+
 
         # Kinematics
         self.position = [0,0]                             # position in m
